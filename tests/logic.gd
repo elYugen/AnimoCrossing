@@ -54,8 +54,8 @@ func _ready() -> void:
 
 	# Pousser un arbre
 	main.select_power(3)
-	var tx := sp.x - 5
-	var tz := sp.y + 5
+	var tx := sp.x + 2
+	var tz := sp.y + 4
 	var ty := w.top_solid_y(tx, tz)
 	_aim(Vector3i(tx, ty, tz), Vector3i.UP)
 	main._use_power()
@@ -101,6 +101,16 @@ func _ready() -> void:
 	_check(Game.is_island_unlocked("corail"), "Corail débloquée")
 	await main.travel_to("corail")
 	_check(Game.current_island == "corail" and Blocks.SAND in Game.available_blocks(), "voyage Corail")
+
+	# Audio
+	var missing := 0
+	for n in Audio.SFX:
+		if (Audio._streams[n] as Array).size() != int(Audio.SFX[n]):
+			missing += 1
+			print("    son manquant : ", n)
+	_check(missing == 0, "bruitages chargés")
+	for isl in Audio.MUSIC:
+		_check(load(Audio.MUSIC[isl]) is AudioStream, "musique " + isl)
 
 	print("=== TESTS TERMINÉS : %d échec(s) ===" % fails)
 	Game.reset_game()

@@ -23,6 +23,7 @@ var power := 0
 var block := Blocks.GRASS
 var target := {}
 var _rotating := false
+var _rotate_anchor := Vector2.ZERO
 var _loading := false
 var _cooldown := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -83,8 +84,9 @@ func _setup_environment() -> void:
 	sky.sky_material = _sky_mat
 	_env.sky = sky
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	_env.ambient_light_energy = 0.55
-	_env.ambient_light_sky_contribution = 0.7
+	_env.ambient_light_energy = 0.75
+	_env.ambient_light_color = Color("e8e2d6")
+	_env.ambient_light_sky_contribution = 0.3
 	_env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	_env.tonemap_exposure = 0.92
 	_env.tonemap_white = 6.0
@@ -98,7 +100,7 @@ func _setup_environment() -> void:
 	_env.fog_density = 0.0025
 	_env.fog_sky_affect = 0.0
 	_env.adjustment_enabled = true
-	_env.adjustment_saturation = 1.18
+	_env.adjustment_saturation = 1.08
 	_env.adjustment_contrast = 1.06
 	we.environment = _env
 	add_child(we)
@@ -108,7 +110,7 @@ func _setup_environment() -> void:
 	_sun.light_energy = 1.0
 	_sun.shadow_enabled = true
 	_sun.shadow_blur = 1.5
-	_sun.directional_shadow_max_distance = 70.0
+	_sun.directional_shadow_max_distance = 80.0
 	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	add_child(_sun)
 
@@ -117,9 +119,9 @@ func _setup_ocean() -> void:
 	var mi := MeshInstance3D.new()
 	mi.name = "Ocean"
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(500, 500)
-	pm.subdivide_width = 160
-	pm.subdivide_depth = 160
+	pm.size = Vector2(700, 700)
+	pm.subdivide_width = 200
+	pm.subdivide_depth = 200
 	mi.mesh = pm
 	_ocean_mat = ShaderMaterial.new()
 	_ocean_mat.shader = load("res://shaders/ocean.gdshader")
@@ -135,7 +137,7 @@ func _setup_clouds() -> void:
 	add_child(_clouds)
 	var mat := MeshBuilder.vertex_color_material()
 	mat.roughness = 1.0
-	for i in 12:
+	for i in 24:
 		var mb := MeshBuilder.new()
 		var n := _rng.randi_range(3, 6)
 		for k in n:
@@ -144,7 +146,7 @@ func _setup_clouds() -> void:
 		var mi := MeshInstance3D.new()
 		mi.mesh = mb.commit(mat)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.position = Vector3(_rng.randf_range(-80, 140), _rng.randf_range(44, 56), _rng.randf_range(-80, 140))
+		mi.position = Vector3(_rng.randf_range(-80, VoxelWorld.SX + 80), _rng.randf_range(44, 56), _rng.randf_range(-80, VoxelWorld.SZ + 80))
 		_clouds.add_child(mi)
 
 
@@ -217,6 +219,7 @@ func _load_island(id: String) -> void:
 	world.build_all()
 	_spawn.y = world.top_solid_y(floori(_spawn.x), floori(_spawn.z)) + 1.1
 	_apply_look(isl)
+	Audio.play_music(id)
 	player.teleport(_spawn)
 	rig.yaw = 0.0
 	rig.snap()
@@ -274,7 +277,7 @@ func _spawn_creatures() -> void:
 	for id in Game.friends:
 		var info: Dictionary = Game.friends[id]
 		if info.get("island", "") == Game.current_island:
-			_make_creature(CreatureDB.get_creature(id), _find_spot(_spawn, 13.0))
+			_make_creature(CreatureDB.get_creature(id), _find_spot(_spawn, 18.0))
 
 
 func _make_creature(d: Dictionary, pos: Vector3) -> Creature:
@@ -310,12 +313,14 @@ func _on_friend_unlocked(id: String) -> void:
 		_burst(pos + Vector3(0, 0.6, 0), Color("ffd84a"), 24)
 		_burst(pos + Vector3(0, 0.6, 0), Color("f7a3c8"), 16)
 	if c["island"] != "":
+		Audio.play("jingle_friend", -4.0, 0.0)
 		hud.show_friend_popup(id)
 		hud.toast("%s s'installe sur l'île !" % c["name"], UIStyle.GREEN_DARK)
 		# Nouvelle île débloquée ?
 		for isl in IslandDB.ISLANDS:
 			if int(isl["friends_needed"]) == Game.friend_count() and int(isl["friends_needed"]) > 0:
 				hud.toast("Nouvelle île débloquée : %s ! (Carte : M)" % isl["name"], UIStyle.BLUE.darkened(0.2))
+				get_tree().create_timer(2.5).timeout.connect(func(): Audio.play("jingle_island", -4.0, 0.0))
 
 
 # --- Boucle --------------------------------------------------------------
@@ -324,10 +329,12 @@ func _process(delta: float) -> void:
 	_cooldown -= delta
 	var blocking := hud.is_blocking() or _loading
 	player.input_enabled = not blocking
+	rig.input_enabled = not blocking
+	world.set_view(player.global_position, rig.camera.global_position)
 	for cl in _clouds.get_children():
 		var n := cl as Node3D
 		n.position.x += delta * 1.2
-		if n.position.x > 160.0:
+		if n.position.x > VoxelWorld.SX + 100.0:
 			n.position.x = -100.0
 	_update_creature_labels()
 	if blocking:
@@ -343,12 +350,35 @@ func _update_target() -> void:
 	var cam := rig.camera
 	var from := cam.project_ray_origin(mp)
 	var dir := cam.project_ray_normal(mp)
-	var hit := world.raycast(from, dir, 60.0)
+	var hit := world.raycast(from, dir, 80.0, _is_cut)
 	if hit["hit"]:
 		var center := Vector3(hit["pos"]) + Vector3(0.5, 0.5, 0.5)
 		if center.distance_to(player.global_position + Vector3(0, 0.7, 0)) <= REACH:
 			target = hit
 	_update_highlight()
+
+
+## Même test que le shader voxel : bloc d'arbre effacé car entre la caméra et le joueur.
+func _is_cut(p: Vector3i) -> bool:
+	if not world.get_blockv(p) in VoxelWorld.SEE_THROUGH:
+		return false
+	var c := Vector3(p) + Vector3(0.5, 0.5, 0.5)
+	var pp := player.global_position
+	if c.y + 0.5 <= pp.y - 0.2:
+		return false
+	var cam := rig.camera.global_position
+	var to_player := pp + Vector3(0, 0.7, 0) - cam
+	var dp := to_player.length()
+	if dp < 0.01:
+		return false
+	var dir := to_player / dp
+	var rel := c - cam
+	var t := rel.dot(dir)
+	if t <= 0.0 or t >= dp - 0.6:
+		return false
+	var perp := (rel - dir * t).length()
+	var r := 2.2 * clampf(t / dp + 0.35, 0.0, 1.0)
+	return perp < r * 0.8
 
 
 func _update_highlight() -> void:
@@ -409,6 +439,27 @@ func _update_creature_labels() -> void:
 
 # --- Entrées -------------------------------------------------------------
 
+## Rotation caméra : clic droit ou clic molette maintenu (souris capturée).
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_RIGHT or mb.button_index == MOUSE_BUTTON_MIDDLE:
+			if mb.pressed and not _rotating and not hud.is_blocking() and not _loading:
+				_rotating = true
+				_rotate_anchor = mb.position
+				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+				get_viewport().set_input_as_handled()
+			elif not mb.pressed and _rotating:
+				_rotating = false
+				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+				Input.warp_mouse(_rotate_anchor)
+				get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion and _rotating:
+		var mm := event as InputEventMouseMotion
+		rig.rotate_by(mm.relative.x, mm.relative.y)
+		get_viewport().set_input_as_handled()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if _loading:
 		return
@@ -435,8 +486,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		match mb.button_index:
-			MOUSE_BUTTON_RIGHT:
-				_rotating = mb.pressed
 			MOUSE_BUTTON_WHEEL_UP:
 				if mb.pressed:
 					rig.zoom(-1.0)
@@ -446,9 +495,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			MOUSE_BUTTON_LEFT:
 				if mb.pressed:
 					_use_power()
-	elif event is InputEventMouseMotion and _rotating:
-		var mm := event as InputEventMouseMotion
-		rig.rotate_by(mm.relative.x, mm.relative.y)
 
 	for i in 4:
 		if event.is_action_pressed("power_%d" % (i + 1)):
@@ -463,8 +509,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func select_power(i: int) -> void:
 	if not hud.power_unlocked(i):
-		hud.toast("Ce pouvoir n'est pas encore débloqué !", UIStyle.TEXT_SOFT)
+		_deny("Ce pouvoir n'est pas encore débloqué !")
 		return
+	if power != i:
+		Audio.play("select", -8.0)
 	power = i
 	hud.set_power(i)
 
@@ -518,6 +566,7 @@ func _interact() -> void:
 			Game.add_stars(5)
 			lines.append("(%s a l'air ravi de te voir ! +5 ★)" % best.data["name"])
 	hud.show_dialog(best.data["name"], lines)
+	Audio.play("talk", -4.0, 0.2, 1.3 if id != "guide" else 0.9)
 	Game.notify_action("talk")
 
 
@@ -527,7 +576,7 @@ func _use_power() -> void:
 	if target.is_empty() or _cooldown > 0.0:
 		return
 	if not hud.power_unlocked(power):
-		hud.toast("Ce pouvoir n'est pas encore débloqué !", UIStyle.TEXT_SOFT)
+		_deny("Ce pouvoir n'est pas encore débloqué !")
 		return
 	_cooldown = 0.16
 	var ok := false
@@ -549,7 +598,7 @@ func _do_break() -> bool:
 	var p: Vector3i = target["pos"]
 	var b: int = target["block"]
 	if p.y <= 0:
-		hud.toast("Ce bloc est trop profond pour être cassé.", UIStyle.TEXT_SOFT)
+		_deny("Ce bloc est trop profond pour être cassé.")
 		return false
 	world.set_block(p, Blocks.AIR)
 	var above := p + Vector3i.UP
@@ -557,6 +606,7 @@ func _do_break() -> bool:
 		world.set_block(above, Blocks.AIR)
 	world.flush()
 	_burst(Vector3(p) + Vector3(0.5, 0.5, 0.5), Blocks.main_color(b), 14)
+	Audio.play("break_" + material_sound(b), -2.0, 0.1, 1.25 if Blocks.is_deco(b) else 1.0)
 	Game.add_stars(1)
 	Game.add_stat("break")
 	Game.notify_action("break")
@@ -573,11 +623,12 @@ func _do_place() -> bool:
 	if cur != Blocks.AIR and not Blocks.is_deco(cur):
 		return false
 	if _overlaps_entity(p):
-		hud.toast("Pas de place ici !", UIStyle.TEXT_SOFT)
+		_deny("Pas de place ici !")
 		return false
 	world.set_block(p, block)
 	world.flush()
 	_burst(Vector3(p) + Vector3(0.5, 0.5, 0.5), Blocks.main_color(block), 8)
+	Audio.play("place_wood" if material_sound(block) == "wood" else "place", -2.0)
 	Game.add_stars(1)
 	Game.add_stat("place")
 	Game.add_stat("place_%d" % block)
@@ -620,10 +671,11 @@ func _do_bloom() -> bool:
 					count += 1
 					_burst(Vector3(x + 0.5, y + 1.3, z + 0.5), Blocks.main_color(f), 4)
 	if count == 0 and converted == 0:
-		hud.toast("Il n'y a rien à faire fleurir ici.", UIStyle.TEXT_SOFT)
+		_deny("Il n'y a rien à faire fleurir ici.")
 		return false
 	world.flush()
 	_burst(Vector3(c) + Vector3(0.5, 1.5, 0.5), Color("ffffff"), 10)
+	Audio.play("bloom", -3.0, 0.15)
 	if count > 0:
 		Game.add_stars(count)
 		Game.add_stat("bloom", count)
@@ -638,12 +690,12 @@ func _do_tree() -> bool:
 		g.y -= 1
 		gb = world.get_blockv(g)
 	if not gb in [Blocks.GRASS, Blocks.DIRT, Blocks.SAND, Blocks.SNOW, Blocks.MOSS]:
-		hud.toast("Les arbres poussent sur l'herbe, la terre, le sable ou la neige.", UIStyle.TEXT_SOFT)
+		_deny("Les arbres poussent sur l'herbe, la terre, le sable ou la neige.")
 		return false
 	var base := g + Vector3i.UP
 	var bc := Vector3(base) + Vector3(0.5, 0, 0.5)
 	if Vector2(bc.x - player.global_position.x, bc.z - player.global_position.z).length() < 0.9 and absf(bc.y - player.global_position.y) < 3.0:
-		hud.toast("Recule un peu pour laisser pousser l'arbre !", UIStyle.TEXT_SOFT)
+		_deny("Recule un peu pour laisser pousser l'arbre !")
 		return false
 	if Blocks.is_deco(world.get_blockv(base)):
 		world.set_block(base, Blocks.AIR)
@@ -651,15 +703,30 @@ func _do_tree() -> bool:
 	var style := IslandGenerator.tree_style(biome, _rng)
 	if not IslandGenerator.grow_tree(world, base.x, base.y, base.z, style, _rng, true):
 		world.flush()
-		hud.toast("Pas assez de place pour un arbre.", UIStyle.TEXT_SOFT)
+		_deny("Pas assez de place pour un arbre.")
 		return false
 	world.flush()
 	_burst(bc + Vector3(0, 3.5, 0), Color("6cbf4a"), 22)
+	Audio.play("tree", -4.0)
+	Audio.play("place_wood", -4.0, 0.1, 0.8)
 	_burst(bc + Vector3(0, 0.5, 0), Color("c99d6c"), 10)
 	Game.add_stars(5)
 	Game.add_stat("tree")
 	Game.notify_action("tree")
 	return true
+
+
+func _deny(msg: String) -> void:
+	hud.toast(msg, UIStyle.TEXT_SOFT)
+	Audio.play("error", -6.0)
+
+
+static func material_sound(b: int) -> String:
+	if b in [Blocks.WOOD, Blocks.PLANK, Blocks.PALM_WOOD]:
+		return "wood"
+	if b in [Blocks.STONE, Blocks.BRICK, Blocks.BASALT, Blocks.MOSS, Blocks.ICE, Blocks.CLAY]:
+		return "stone"
+	return "soft"
 
 
 func _overlaps_entity(p: Vector3i) -> bool:

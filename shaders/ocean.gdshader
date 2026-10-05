@@ -36,7 +36,7 @@ void fragment() {
 	vec2 g = floor(world_pos.xz * 1.5);
 	float sparkle = step(0.985, fract(sin(dot(g, vec2(12.9898, 78.233)) + floor(TIME * 2.0)) * 43758.5453));
 
-	ALBEDO = mix(col.rgb, foam_color.rgb, foam) + sparkle * 0.35;
+	ALBEDO = mix(col.rgb, foam_color.rgb, foam) + sparkle * 0.12;
 	ALPHA = mix(col.a, 1.0, foam);
 	ROUGHNESS = 0.12;
 	SPECULAR = 0.45;

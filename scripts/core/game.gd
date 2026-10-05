@@ -8,6 +8,7 @@ signal stats_changed
 signal action_done(kind: String)
 
 const SAVE_PATH := "user://animo_save.json"
+const SAVE_VERSION := 2  # v2 : îles agrandies (128x128), anciens édits invalides
 const PULL_COST := 100
 const TEN_PULL_COST := 900
 const DUPLICATE_REFUND := 25
@@ -24,6 +25,8 @@ var pity := 0
 var total_pulls := 0
 var talked := {}  # amis à qui on a parlé cette session
 var player_skin := "a"  # modèle Kenney du joueur (a..r)
+var music_volume := 0.6
+var sfx_volume := 0.8
 
 var _autosave_timer := 0.0
 
@@ -49,10 +52,15 @@ func _notification(what: int) -> void:
 
 func _setup_inputs() -> void:
 	# Touches physiques : WASD en QWERTY == ZQSD en AZERTY.
-	_add_physical("move_forward", [KEY_W, KEY_UP])
-	_add_physical("move_back", [KEY_S, KEY_DOWN])
-	_add_physical("move_left", [KEY_A, KEY_LEFT])
-	_add_physical("move_right", [KEY_D, KEY_RIGHT])
+	_add_physical("move_forward", [KEY_W])
+	_add_physical("move_back", [KEY_S])
+	_add_physical("move_left", [KEY_A])
+	_add_physical("move_right", [KEY_D])
+	# Caméra au clavier : flèches.
+	_add_physical("cam_left", [KEY_LEFT])
+	_add_physical("cam_right", [KEY_RIGHT])
+	_add_physical("cam_up", [KEY_UP])
+	_add_physical("cam_down", [KEY_DOWN])
 	_add_physical("jump", [KEY_SPACE])
 	_add_physical("power_1", [KEY_1, KEY_KP_1])
 	_add_physical("power_2", [KEY_2, KEY_KP_2])
@@ -204,7 +212,7 @@ func record_edit(island_id: String, pos: Vector3i, id: int) -> void:
 
 func save_game() -> void:
 	var data := {
-		"version": 1,
+		"version": SAVE_VERSION,
 		"stars": stars,
 		"current_island": current_island,
 		"tutorial_step": tutorial_step,
@@ -214,6 +222,8 @@ func save_game() -> void:
 		"pity": pity,
 		"total_pulls": total_pulls,
 		"player_skin": player_skin,
+		"music_volume": music_volume,
+		"sfx_volume": sfx_volume,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f:
@@ -238,6 +248,12 @@ func load_game() -> void:
 	pity = int(parsed.get("pity", 0))
 	total_pulls = int(parsed.get("total_pulls", 0))
 	player_skin = str(parsed.get("player_skin", "a"))
+	music_volume = float(parsed.get("music_volume", 0.6))
+	sfx_volume = float(parsed.get("sfx_volume", 0.8))
+	if int(parsed.get("version", 1)) < SAVE_VERSION:
+		# Les îles ont changé de taille : on garde la progression mais
+		# les constructions de l'ancienne version ne sont plus valides.
+		edits = {}
 
 
 func reset_game() -> void:

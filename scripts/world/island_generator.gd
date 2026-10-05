@@ -3,7 +3,9 @@ extends RefCounted
 ## Génération procédurale des îles voxel + construction des arbres.
 
 const SEA := 6
-const SPAWN := Vector2i(30, 40)
+const SPAWN := Vector2i(60, 86)
+const CENTER := 63.5
+const RADIUS := 56.0
 
 const FLOWER_SETS := {
 	"prairie": [Blocks.FLOWER_RED, Blocks.FLOWER_YELLOW, Blocks.FLOWER_WHITE, Blocks.FLOWER_PINK, Blocks.FLOWER_BLUE, Blocks.FLOWER_PURPLE],
@@ -22,11 +24,11 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 	rng.seed = seed_v
 	var noise := FastNoiseLite.new()
 	noise.seed = seed_v
-	noise.frequency = 0.045
+	noise.frequency = 0.032
 	noise.fractal_octaves = 3
 	var warp := FastNoiseLite.new()
 	warp.seed = seed_v + 7
-	warp.frequency = 0.07
+	warp.frequency = 0.04
 	var heights := PackedInt32Array()
 	heights.resize(VoxelWorld.SX * VoxelWorld.SZ)
 	var cone_map := PackedFloat32Array()
@@ -36,8 +38,8 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 
 	for z in VoxelWorld.SZ:
 		for x in VoxelWorld.SX:
-			var dx := (x - 31.5) / 27.0
-			var dz := (z - 31.5) / 27.0
+			var dx := (x - CENTER) / RADIUS
+			var dz := (z - CENTER) / RADIUS
 			var d := sqrt(dx * dx + dz * dz) + warp.get_noise_2d(x, z) * 0.22
 			var f := clampf(1.0 - d, 0.0, 1.0)
 			f = f * f * (3.0 - 2.0 * f)
@@ -46,21 +48,21 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 			var cone := 0.0
 			match biome:
 				"prairie":
-					h += f * 9.0 + hn * 5.0 * f
+					h += f * 9.0 + hn * 6.0 * f
 				"plage":
 					h += f * 6.0 + hn * 2.5 * f
 				"givre":
 					h += f * 8.0 + hn * 4.0 * f
-					var pd := Vector2(x - 42, z - 22).length()
-					var peak := clampf(1.0 - pd / 14.0, 0.0, 1.0)
+					var pd := Vector2(x - 84, z - 42).length()
+					var peak := clampf(1.0 - pd / 26.0, 0.0, 1.0)
 					h += peak * peak * 16.0
 				"braise":
 					h += f * 8.0 + hn * 4.0 * f
-					var vd := Vector2(x - 33, z - 25).length()
-					cone = clampf(1.0 - vd / 15.0, 0.0, 1.0)
-					h += cone * 14.0
-					if vd < 3.5:
-						h -= (3.5 - vd) * 2.2
+					var vd := Vector2(x - 66, z - 46).length()
+					cone = clampf(1.0 - vd / 26.0, 0.0, 1.0)
+					h += cone * cone * 18.0
+					if vd < 5.0:
+						h -= (5.0 - vd) * 2.0
 			raw[x + z * VoxelWorld.SX] = h
 			cone_map[x + z * VoxelWorld.SX] = cone
 
@@ -111,10 +113,13 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 			for dx in range(-1, 2):
 				world.set_raw(SPAWN.x + 4 + dx, sh, SPAWN.y - 2 + dz, Blocks.DIRT)
 
+	# Ruines de maisons.
+	var ruins := _place_ruins(world, heights, biome, rng, 11)
+
 	# Rochers.
-	for i in 10:
-		var x := rng.randi_range(6, 57)
-		var z := rng.randi_range(6, 57)
+	for i in 30:
+		var x := rng.randi_range(6, VoxelWorld.SX - 7)
+		var z := rng.randi_range(6, VoxelWorld.SZ - 7)
 		var y := world.top_solid_y(x, z)
 		if y <= SEA + 1 or _near_spawn(x, z, 6):
 			continue
@@ -128,14 +133,14 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 		world.set_raw(x, y + 2, z, rock)
 
 	# Arbres.
-	var tree_count := {"prairie": 26, "plage": 14, "givre": 30, "braise": 28}
+	var tree_count := {"prairie": 60, "plage": 40, "givre": 70, "braise": 65}
 	var placed := 0
 	var attempts := 0
-	while placed < int(tree_count[biome]) and attempts < 600:
+	while placed < int(tree_count[biome]) and attempts < 2500:
 		attempts += 1
-		var x := rng.randi_range(4, 59)
-		var z := rng.randi_range(4, 59)
-		if _near_spawn(x, z, 7):
+		var x := rng.randi_range(4, VoxelWorld.SX - 5)
+		var z := rng.randi_range(4, VoxelWorld.SZ - 5)
+		if _near_spawn(x, z, 10) or _in_rects(ruins, x, z, 3):
 			continue
 		var y := world.top_solid_y(x, z)
 		if y <= SEA:
@@ -171,6 +176,100 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 	return Vector3(SPAWN.x + 0.5, spawn_y + 0.1, SPAWN.y + 0.5)
 
 
+## Petites ruines de maisons : murs effondrés, sol, poutres et débris.
+static func _place_ruins(world: VoxelWorld, heights: PackedInt32Array, biome: String, rng: RandomNumberGenerator, count: int) -> Array[Rect2i]:
+	var mats := {
+		"prairie": [Blocks.STONE, Blocks.MOSS, Blocks.PLANK, Blocks.WOOD],
+		"plage": [Blocks.CLAY, Blocks.SAND, Blocks.PLANK, Blocks.PALM_WOOD],
+		"givre": [Blocks.STONE, Blocks.MOSS, Blocks.PLANK, Blocks.WOOD],
+		"braise": [Blocks.BRICK, Blocks.BASALT, Blocks.STONE, Blocks.WOOD],
+	}
+	var m: Array = mats[biome]
+	var wall: int = m[0]
+	var wall_alt: int = m[1]
+	var floor_b: int = m[2]
+	var beam: int = m[3]
+	var rects: Array[Rect2i] = []
+	var attempts := 0
+	while rects.size() < count and attempts < 400:
+		attempts += 1
+		var w := rng.randi_range(5, 8)
+		var d := rng.randi_range(5, 7)
+		var x0 := rng.randi_range(8, VoxelWorld.SX - 9 - w)
+		var z0 := rng.randi_range(8, VoxelWorld.SZ - 9 - d)
+		var rect := Rect2i(x0, z0, w, d)
+		if _near_spawn(x0 + w / 2, z0 + d / 2, 14):
+			continue
+		var overlap := false
+		for r in rects:
+			if r.grow(4).intersects(rect):
+				overlap = true
+				break
+		if overlap:
+			continue
+		# Terrain assez plat et hors de l'eau.
+		var lo := 999
+		var hi := -999
+		for z in range(z0, z0 + d):
+			for x in range(x0, x0 + w):
+				var h := heights[x + z * VoxelWorld.SX]
+				lo = mini(lo, h)
+				hi = maxi(hi, h)
+		if hi - lo > 2 or lo <= SEA + 1:
+			continue
+		rects.append(rect)
+		var base := hi
+		var door_side := rng.randi_range(0, 3)
+		for z in range(z0, z0 + d):
+			for x in range(x0, x0 + w):
+				# Fondations jusqu'au terrain.
+				for y in range(heights[x + z * VoxelWorld.SX] + 1, base):
+					world.set_raw(x, y, z, wall)
+				var edge_x := x == x0 or x == x0 + w - 1
+				var edge_z := z == z0 or z == z0 + d - 1
+				var corner := edge_x and edge_z
+				# Sol (troué par endroits).
+				world.set_raw(x, base, z, floor_b if rng.randf() < 0.8 else wall_alt)
+				for y in range(base + 1, base + 5):
+					world.set_raw(x, y, z, Blocks.AIR)
+				if not (edge_x or edge_z):
+					if rng.randf() < 0.18:
+						world.set_raw(x, base + 1, z, Blocks.TALL_GRASS if biome != "givre" else Blocks.SNOW)
+					continue
+				# Porte au milieu d'un côté.
+				var mid_x := x0 + w / 2
+				var mid_z := z0 + d / 2
+				var is_door := (door_side == 0 and z == z0 and x == mid_x) or (door_side == 1 and z == z0 + d - 1 and x == mid_x) 					or (door_side == 2 and x == x0 and z == mid_z) or (door_side == 3 and x == x0 + w - 1 and z == mid_z)
+				if is_door:
+					continue
+				var hh := 0
+				if corner:
+					hh = rng.randi_range(2, 4)
+				else:
+					var r := rng.randf()
+					hh = 0 if r < 0.22 else (1 if r < 0.5 else (2 if r < 0.82 else 3))
+				for k in hh:
+					world.set_raw(x, base + 1 + k, z, wall_alt if rng.randf() < 0.3 else wall)
+				if biome == "givre" and hh > 0:
+					world.set_raw(x, base + 1 + hh, z, Blocks.SNOW)
+		# Une vieille poutre qui traverse.
+		if rng.randf() < 0.6:
+			var bz := z0 + rng.randi_range(1, d - 2)
+			for x in range(x0, x0 + w):
+				if rng.randf() < 0.75:
+					world.set_raw(x, base + 4, bz, beam)
+		# Débris tombés autour.
+		for i in rng.randi_range(3, 7):
+			var fx := x0 + rng.randi_range(-2, w + 1)
+			var fz := z0 + rng.randi_range(-2, d + 1)
+			if rect.has_point(Vector2i(fx, fz)):
+				continue
+			var fy := world.top_solid_y(fx, fz)
+			if fy > SEA:
+				world.set_raw(fx, fy + 1, fz, wall_alt if rng.randf() < 0.5 else wall)
+	return rects
+
+
 static func _top_block(biome: String, h: int, hn: float, cone: float) -> int:
 	if h <= SEA:
 		return Blocks.STONE if biome == "givre" else Blocks.SAND
@@ -186,6 +285,13 @@ static func _top_block(biome: String, h: int, hn: float, cone: float) -> int:
 		"braise":
 			return Blocks.BASALT if cone > 0.42 else Blocks.GRASS
 	return Blocks.GRASS
+
+
+static func _in_rects(rects: Array[Rect2i], x: int, z: int, margin: int) -> bool:
+	for r in rects:
+		if r.grow(margin).has_point(Vector2i(x, z)):
+			return true
+	return false
 
 
 static func _near_spawn(x: int, z: int, r: float) -> bool:

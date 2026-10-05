@@ -3,9 +3,9 @@ extends Node3D
 ## Monde voxel d'une île : stockage, maillage par chunks avec occlusion
 ## ambiante par sommet, collisions et raycast DDA.
 
-const SX := 64
+const SX := 128
 const SY := 40
-const SZ := 64
+const SZ := 128
 const CHUNK := 16
 const AO_CURVE: Array[float] = [0.5, 0.67, 0.83, 1.0]
 const GRASS_BAND := 0.72
@@ -16,18 +16,31 @@ const TAN_V: Array[Vector3i] = [Vector3i(0, 0, 1), Vector3i(0, 0, 1), Vector3i(0
 const CORNERS: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 1)]
 
 const STEM_COLOR := Color("4f9e3a")
+## Blocs d'arbres : effacés quand ils cachent le joueur (voir voxel.gdshader).
+const SEE_THROUGH: Array[int] = [Blocks.WOOD, Blocks.PALM_WOOD, Blocks.LEAVES, Blocks.AUTUMN_LEAVES, Blocks.PINE_LEAVES, Blocks.PALM_LEAVES, Blocks.WOOL]
 
 var data := PackedByteArray()
 var island_id := ""
-var material: StandardMaterial3D
+var material: ShaderMaterial
 var _chunks := {}  # Vector2i -> Dictionary
 var _dirty := {}
 var _max_y := SY - 1  # plus haut bloc non vide (limite le maillage)
+var _see := PackedByteArray()  # 1 si le type de bloc est effaçable (arbre)
 
 
 func _init() -> void:
 	data.resize(SX * SY * SZ)
-	material = MeshBuilder.vertex_color_material()
+	_see.resize(256)
+	for id in SEE_THROUGH:
+		_see[id] = 1
+	material = ShaderMaterial.new()
+	material.shader = load("res://shaders/voxel.gdshader")
+
+
+## Met à jour la zone « transparente » entre la caméra et le joueur.
+func set_view(player_pos: Vector3, cam_pos: Vector3) -> void:
+	material.set_shader_parameter("player_pos", player_pos)
+	material.set_shader_parameter("cam_pos", cam_pos)
 
 
 func clear() -> void:
@@ -141,9 +154,11 @@ func _build_chunk(key: Vector2i) -> void:
 				if id >= Blocks.FLOWER_RED:
 					_emit_deco(deco, x, y, z, id)
 					continue
+				var see := _see[id]
 				for d in 6:
 					var n := DIRS[d]
-					if is_opaque(x + n.x, y + n.y, z + n.z):
+					# Face cachée, sauf contre un bloc d'arbre (qui peut s'effacer).
+					if is_opaque(x + n.x, y + n.y, z + n.z) and (see == 1 or _see[get_block(x + n.x, y + n.y, z + n.z)] == 0):
 						continue
 					_emit_face(mb, faces, x, y, z, id, d)
 	(c["mesh"] as MeshInstance3D).mesh = mb.commit(material)
@@ -191,6 +206,7 @@ func _emit_face(mb: MeshBuilder, faces: PackedVector3Array, x: int, y: int, z: i
 	# Variation de teinte par bloc pour le charme voxel.
 	var jitter := 0.94 + _hash(x, y, z) * 0.1
 	var col := Blocks.face_color(id, d)
+	col.a = 0.0 if id in SEE_THROUGH else 1.0
 	var nf := Vector3(n)
 	# Diagonale choisie selon l'AO pour éviter les artefacts.
 	var order: Array[int] = [0, 1, 2, 3]
@@ -200,6 +216,7 @@ func _emit_face(mb: MeshBuilder, faces: PackedVector3Array, x: int, y: int, z: i
 		# Côté d'herbe : bande verte en haut, terre en dessous.
 		var green: Color = Blocks.DEFS[Blocks.GRASS]["top"]
 		green = green.darkened(0.08)
+		green.a = 1.0
 		var mid := float(y) + GRASS_BAND
 		var low: Array[Vector3] = []
 		var high: Array[Vector3] = []
@@ -223,13 +240,12 @@ func _quad(mb: MeshBuilder, pos: Array[Vector3], ao: Array[float], order: Array[
 	var b := order[1]
 	var c := order[2]
 	var d := order[3]
-	col.a = 1.0
 	mb.add_quad(pos[a], pos[b], pos[c], pos[d], n,
 		_shade(col, ao[a]), _shade(col, ao[b]), _shade(col, ao[c]), _shade(col, ao[d]))
 
 
 static func _shade(c: Color, f: float) -> Color:
-	return Color(c.r * f, c.g * f, c.b * f, 1.0)
+	return Color(c.r * f, c.g * f, c.b * f, c.a)
 
 
 func _emit_deco(mb: MeshBuilder, x: int, y: int, z: int, id: int) -> void:
@@ -256,7 +272,8 @@ func _emit_deco(mb: MeshBuilder, x: int, y: int, z: int, id: int) -> void:
 # --- Raycast -------------------------------------------------------------
 
 ## Raycast voxel (DDA). Renvoie {hit, pos: Vector3i, normal: Vector3i, block}.
-func raycast(origin: Vector3, dir: Vector3, max_dist: float) -> Dictionary:
+## `skip(pos) -> bool` permet d'ignorer certains blocs (ex. blocs effacés).
+func raycast(origin: Vector3, dir: Vector3, max_dist: float, skip := Callable()) -> Dictionary:
 	dir = dir.normalized()
 	var p := Vector3i(floori(origin.x), floori(origin.y), floori(origin.z))
 	var step := Vector3i(int(signf(dir.x)), int(signf(dir.y)), int(signf(dir.z)))
@@ -272,7 +289,7 @@ func raycast(origin: Vector3, dir: Vector3, max_dist: float) -> Dictionary:
 	var t := 0.0
 	while t <= max_dist:
 		var b := get_block(p.x, p.y, p.z)
-		if b != Blocks.AIR:
+		if b != Blocks.AIR and not (skip.is_valid() and skip.call(p)):
 			return {"hit": true, "pos": p, "normal": normal, "block": b, "dist": t}
 		if t_max.x < t_max.y and t_max.x < t_max.z:
 			p.x += step.x

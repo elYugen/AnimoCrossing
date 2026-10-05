@@ -104,6 +104,8 @@ func _pull(count: int) -> void:
 		return
 	_busy = true
 	_refresh()
+	Audio.play("coins", -4.0)
+	Audio.play("shake", -4.0)
 	for c in _grid.get_children():
 		c.queue_free()
 	_preview.clear()
@@ -131,6 +133,8 @@ func _pull(count: int) -> void:
 	tw.parallel().tween_property(_capsule, "scale", Vector2(1.4, 1.4), 0.4)
 	tw.tween_property(_capsule, "modulate", Color(3, 3, 3, 0), 0.25)
 	await tw.finished
+	Audio.play("capsule", -2.0)
+	Audio.play(["jingle_common", "jingle_rare", "jingle_legend"][int(best["rarity"])], -3.0, 0.0)
 	_capsule.visible = false
 	_capsule.rotation = 0.0
 

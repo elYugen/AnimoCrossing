@@ -115,6 +115,7 @@ static func button(text: String, size := 18) -> Button:
 	b.text = text
 	b.add_theme_font_size_override("font_size", size)
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.pressed.connect(func(): Audio.play("click", -6.0))
 	return b
 
 

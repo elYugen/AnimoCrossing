@@ -22,6 +22,7 @@ var _model: Node3D
 var _anim_player: AnimationPlayer
 var _facing := 0.0
 var _action_timer := 0.0
+var _step_timer := 0.0
 
 
 func _ready() -> void:
@@ -149,6 +150,17 @@ func _physics_process(delta: float) -> void:
 		_facing = atan2(dir.x, dir.z)
 	_pivot.rotation.y = lerp_angle(_pivot.rotation.y, _facing, minf(1.0, delta * 12.0))
 
+	# Bruits de pas selon le sol.
+	var hspeed := Vector2(velocity.x, velocity.z).length()
+	if is_on_floor() and hspeed > 0.5 and world:
+		_step_timer -= delta * hspeed / SPEED
+		if _step_timer <= 0.0:
+			_step_timer = 0.36
+			var below := world.get_block(floori(global_position.x), floori(global_position.y - 0.2), floori(global_position.z))
+			Audio.play(_step_sound(below), -14.0, 0.12)
+	else:
+		_step_timer = 0.0
+
 	# Animations
 	_action_timer -= delta
 	if _action_timer <= 0.0:
@@ -162,6 +174,16 @@ func _physics_process(delta: float) -> void:
 
 	if global_position.y < -8.0:
 		teleport(respawn_point)
+
+
+static func _step_sound(b: int) -> String:
+	if b in [Blocks.SNOW, Blocks.ICE]:
+		return "step_snow"
+	if b in [Blocks.WOOD, Blocks.PLANK, Blocks.PALM_WOOD]:
+		return "step_wood"
+	if b in [Blocks.STONE, Blocks.BRICK, Blocks.BASALT, Blocks.MOSS, Blocks.CLAY]:
+		return "step_stone"
+	return "step_grass"
 
 
 func teleport(p: Vector3) -> void:

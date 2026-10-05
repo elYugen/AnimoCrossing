@@ -9,7 +9,7 @@ signal block_selected(id: int)
 
 const TUTO := [
 	{"text": "Bienvenue sur l'Île Prairie ! Je suis le Pr. Hibou.\nCette île est encore bien calme... Grâce à tes pouvoirs, tu vas pouvoir la façonner et attirer plein de créatures !", "button": "Continuer"},
-	{"text": "Déplace-toi avec ZQSD (ou WASD), saute avec Espace et cours avec Maj.\nMaintiens le clic droit pour tourner la caméra, molette pour zoomer.", "wait": "move"},
+	{"text": "Déplace-toi avec ZQSD (ou WASD), saute avec Espace et cours avec Maj.\nTourne la caméra en maintenant le clic droit (ou avec les flèches), molette pour zoomer.", "wait": "move"},
 	{"text": "Pouvoir n°1 : CASSER !\nAppuie sur 1, vise un bloc proche avec la souris et fais un clic gauche.\nCasse 3 blocs.", "wait": "break", "count": 3},
 	{"text": "Pouvoir n°2 : POSER !\nAppuie sur 2 et clique pour poser un bloc. Change de bloc avec R / F ou dans la palette.\nPose 3 blocs.", "wait": "place", "count": 3},
 	{"text": "Pouvoir n°3 : FAIRE FLEURIR !\nAppuie sur 3 et clique sur la parcelle de terre à côté de moi pour la couvrir de fleurs.", "wait": "bloom", "count": 1},
@@ -223,7 +223,7 @@ func _build_hint() -> void:
 	p.add_theme_stylebox_override("panel", UIStyle.box(Color(1, 0.98, 0.94, 0.8), 14, UIStyle.BORDER, 2, 10))
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mc.add_child(p)
-	_hint_label = UIStyle.label("ZQSD : marcher · Espace : sauter · Maj : courir\nClic gauche : pouvoir · Clic droit : caméra\nE : parler · 1-4 : pouvoirs · Échap : menu", 13, UIStyle.TEXT_SOFT)
+	_hint_label = UIStyle.label("ZQSD : marcher · Espace : sauter · Maj : courir\nClic gauche : pouvoir · Clic droit / flèches : caméra\nE : parler · 1-4 : pouvoirs · Échap : menu", 13, UIStyle.TEXT_SOFT)
 	p.add_child(_hint_label)
 
 
@@ -339,6 +339,13 @@ func _build_pause() -> void:
 	skin_row.add_child(nxt)
 	prev.pressed.connect(func(): _change_skin(-1))
 	nxt.pressed.connect(func(): _change_skin(1))
+	body.add_child(_volume_row("Musique", Game.music_volume, func(v):
+		Game.music_volume = v
+		Audio.apply_volumes()))
+	body.add_child(_volume_row("Sons", Game.sfx_volume, func(v):
+		Game.sfx_volume = v
+		Audio.apply_volumes()
+		Audio.play("click", -6.0)))
 	var s := UIStyle.button("Sauvegarder", 20)
 	s.pressed.connect(func():
 		Game.save_game()
@@ -359,6 +366,24 @@ func _build_pause() -> void:
 		get_tree().quit())
 	body.add_child(q)
 	body.add_child(UIStyle.label("Personnages voxel : Kenney (CC0)", 12, UIStyle.TEXT_SOFT))
+
+
+func _volume_row(text: String, value: float, on_change: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var l := UIStyle.label(text, 17)
+	l.custom_minimum_size.x = 90
+	row.add_child(l)
+	var sl := HSlider.new()
+	sl.min_value = 0.0
+	sl.max_value = 1.0
+	sl.step = 0.05
+	sl.value = value
+	sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sl.drag_ended.connect(func(_c): on_change.call(sl.value))
+	row.add_child(sl)
+	return row
 
 
 func _change_skin(step: int) -> void:
@@ -566,12 +591,14 @@ func toggle_panel(which: String) -> void:
 	_root.add_child(_open_panel)
 	_root.move_child(_open_panel, _fade.get_index())
 	_open_panel.call("open")
+	Audio.play("book" if which == "carnet" else "open", -4.0)
 	_open_panel.modulate.a = 0.0
 	create_tween().tween_property(_open_panel, "modulate:a", 1.0, 0.15)
 
 
 func close_panel() -> void:
 	if _open_panel:
+		Audio.play("close", -6.0)
 		_root.remove_child(_open_panel)
 		_open_panel = null
 
@@ -616,6 +643,7 @@ func _tuto_next() -> void:
 		toast("+%d ★" % int(t["reward"]), UIStyle.STAR.darkened(0.15))
 	Game.tutorial_step += 1
 	_tuto_count = 0
+	Audio.play("confirm", -4.0, 0.0)
 	if Game.tutorial_step >= TUTO_DONE:
 		_tuto_panel.visible = false
 		toast("Tutoriel terminé ! Amuse-toi bien sur l'archipel !", UIStyle.GREEN_DARK)
