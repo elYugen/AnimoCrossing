@@ -3,9 +3,9 @@ extends RefCounted
 ## Génération procédurale des îles voxel + construction des arbres.
 
 const SEA := 6
-const SPAWN := Vector2i(60, 86)
-const CENTER := 63.5
-const RADIUS := 56.0
+const SPAWN := Vector2i(120, 172)
+const CENTER := 127.5
+const RADIUS := 112.0
 
 const FLOWER_SETS := {
 	"prairie": [Blocks.FLOWER_RED, Blocks.FLOWER_YELLOW, Blocks.FLOWER_WHITE, Blocks.FLOWER_PINK, Blocks.FLOWER_BLUE, Blocks.FLOWER_PURPLE],
@@ -35,6 +35,10 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 	cone_map.resize(VoxelWorld.SX * VoxelWorld.SZ)
 	var raw := PackedFloat32Array()
 	raw.resize(VoxelWorld.SX * VoxelWorld.SZ)
+	# Grandes collines (basse fréquence) pour varier les grandes îles.
+	var hills := FastNoiseLite.new()
+	hills.seed = seed_v + 13
+	hills.frequency = 0.012
 
 	for z in VoxelWorld.SZ:
 		for x in VoxelWorld.SX:
@@ -44,7 +48,8 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 			var f := clampf(1.0 - d, 0.0, 1.0)
 			f = f * f * (3.0 - 2.0 * f)
 			var hn := (noise.get_noise_2d(x, z) + 1.0) * 0.5
-			var h := SEA - 3.0
+			var hl := maxf(0.0, hills.get_noise_2d(x, z)) * 7.0 * f
+			var h := SEA - 3.0 + hl
 			var cone := 0.0
 			match biome:
 				"prairie":
@@ -53,16 +58,16 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 					h += f * 6.0 + hn * 2.5 * f
 				"givre":
 					h += f * 8.0 + hn * 4.0 * f
-					var pd := Vector2(x - 84, z - 42).length()
-					var peak := clampf(1.0 - pd / 26.0, 0.0, 1.0)
+					var pd := Vector2(x - 168, z - 84).length()
+					var peak := clampf(1.0 - pd / 40.0, 0.0, 1.0)
 					h += peak * peak * 16.0
 				"braise":
 					h += f * 8.0 + hn * 4.0 * f
-					var vd := Vector2(x - 66, z - 46).length()
-					cone = clampf(1.0 - vd / 26.0, 0.0, 1.0)
-					h += cone * cone * 18.0
-					if vd < 5.0:
-						h -= (5.0 - vd) * 2.0
+					var vd := Vector2(x - 132, z - 92).length()
+					cone = clampf(1.0 - vd / 40.0, 0.0, 1.0)
+					h += cone * cone * 20.0
+					if vd < 7.0:
+						h -= (7.0 - vd) * 1.6
 			raw[x + z * VoxelWorld.SX] = h
 			cone_map[x + z * VoxelWorld.SX] = cone
 
@@ -114,10 +119,10 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 				world.set_raw(SPAWN.x + 4 + dx, sh, SPAWN.y - 2 + dz, Blocks.DIRT)
 
 	# Ruines de maisons.
-	var ruins := _place_ruins(world, heights, biome, rng, 11)
+	var ruins := _place_ruins(world, heights, biome, rng, 32)
 
 	# Rochers.
-	for i in 30:
+	for i in 110:
 		var x := rng.randi_range(6, VoxelWorld.SX - 7)
 		var z := rng.randi_range(6, VoxelWorld.SZ - 7)
 		var y := world.top_solid_y(x, z)
@@ -133,10 +138,10 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 		world.set_raw(x, y + 2, z, rock)
 
 	# Arbres.
-	var tree_count := {"prairie": 60, "plage": 40, "givre": 70, "braise": 65}
+	var tree_count := {"prairie": 240, "plage": 160, "givre": 280, "braise": 260}
 	var placed := 0
 	var attempts := 0
-	while placed < int(tree_count[biome]) and attempts < 2500:
+	while placed < int(tree_count[biome]) and attempts < 10000:
 		attempts += 1
 		var x := rng.randi_range(4, VoxelWorld.SX - 5)
 		var z := rng.randi_range(4, VoxelWorld.SZ - 5)
@@ -161,7 +166,7 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 	var grass_chance := {"prairie": 0.09, "plage": 0.05, "givre": 0.0, "braise": 0.07}
 	for z in VoxelWorld.SZ:
 		for x in VoxelWorld.SX:
-			var y := world.top_solid_y(x, z)
+			var y := heights[x + z * VoxelWorld.SX]
 			if y < 0 or y >= VoxelWorld.SY - 1:
 				continue
 			if world.get_block(x, y, z) != Blocks.GRASS or world.get_block(x, y + 1, z) != Blocks.AIR:
@@ -191,7 +196,7 @@ static func _place_ruins(world: VoxelWorld, heights: PackedInt32Array, biome: St
 	var beam: int = m[3]
 	var rects: Array[Rect2i] = []
 	var attempts := 0
-	while rects.size() < count and attempts < 400:
+	while rects.size() < count and attempts < 1500:
 		attempts += 1
 		var w := rng.randi_range(5, 8)
 		var d := rng.randi_range(5, 7)

@@ -3,9 +3,9 @@ extends Node3D
 ## Monde voxel d'une île : stockage, maillage par chunks avec occlusion
 ## ambiante par sommet, collisions et raycast DDA.
 
-const SX := 128
+const SX := 256
 const SY := 40
-const SZ := 128
+const SZ := 256
 const CHUNK := 16
 const AO_CURVE: Array[float] = [0.5, 0.67, 0.83, 1.0]
 const GRASS_BAND := 0.72
@@ -26,6 +26,9 @@ var _chunks := {}  # Vector2i -> Dictionary
 var _dirty := {}
 var _max_y := SY - 1  # plus haut bloc non vide (limite le maillage)
 var _see := PackedByteArray()  # 1 si le type de bloc est effaçable (arbre)
+var _pending := {}  # chunks pas encore maillés (construits progressivement)
+## Position autour de laquelle on maille en priorité (le joueur).
+var focus := Vector3.ZERO
 
 
 func _init() -> void:
@@ -110,16 +113,22 @@ func top_solid_y(x: int, z: int) -> int:
 
 # --- Construction des chunks ---------------------------------------------
 
-func build_all() -> void:
+## Crée tous les chunks : ceux proches de `center` sont maillés tout de
+## suite, les autres progressivement (les plus proches du joueur d'abord).
+func build_all(center: Vector3, sync_radius := 2) -> void:
 	for key in _chunks:
 		var c: Dictionary = _chunks[key]
 		(c["body"] as Node).queue_free()
 	_chunks.clear()
 	_dirty.clear()
+	_pending.clear()
+	focus = center
 	_max_y = 0
-	for i in data.size():
-		if data[i] != 0:
-			_max_y = maxi(_max_y, i / (SX * SZ))
+	var layer := SX * SZ
+	for y in range(SY - 1, -1, -1):
+		if data.slice(y * layer, (y + 1) * layer).count(0) != layer:
+			_max_y = y
+			break
 	_max_y = mini(_max_y + 1, SY - 1)
 	for cx in SX / CHUNK:
 		for cz in SZ / CHUNK:
@@ -135,10 +144,35 @@ func build_all() -> void:
 			body.add_child(deco)
 			add_child(body)
 			_chunks[key] = {"body": body, "shape": shape, "mesh": mi, "deco": deco}
+			_pending[key] = true
+	var ck := Vector2i(floori(center.x / CHUNK), floori(center.z / CHUNK))
+	for key in _pending.keys():
+		if absi(key.x - ck.x) <= sync_radius and absi(key.y - ck.y) <= sync_radius:
 			_build_chunk(key)
 
 
+func is_fully_built() -> bool:
+	return _pending.is_empty()
+
+
+func _process(_delta: float) -> void:
+	if _pending.is_empty():
+		return
+	var t0 := Time.get_ticks_usec()
+	var fc := Vector2(focus.x, focus.z) / CHUNK
+	while not _pending.is_empty() and Time.get_ticks_usec() - t0 < 5000:
+		var best := Vector2i.ZERO
+		var best_d := INF
+		for key in _pending:
+			var d := (Vector2(key) + Vector2(0.5, 0.5)).distance_squared_to(fc)
+			if d < best_d:
+				best_d = d
+				best = key
+		_build_chunk(best)
+
+
 func _build_chunk(key: Vector2i) -> void:
+	_pending.erase(key)
 	var c: Dictionary = _chunks[key]
 	var mb := MeshBuilder.new()
 	var deco := MeshBuilder.new()

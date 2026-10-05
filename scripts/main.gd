@@ -2,12 +2,14 @@ extends Node3D
 ## Scène principale : environnement, île voxel, joueur, créatures, pouvoirs.
 
 const REACH := 6.5
+const ADMIN_REACH := 24.0
 const WATER_Y := IslandGenerator.SEA + 0.75
 
 var world: VoxelWorld
 var player: Player
 var rig: CameraRig
 var hud: HUD
+var title: TitleMenu
 var creatures_root: Node3D
 
 var _env: Environment
@@ -28,6 +30,7 @@ var _loading := false
 var _cooldown := 0.0
 var _rng := RandomNumberGenerator.new()
 var _spawn := Vector3.ZERO
+var _in_title := true
 
 
 func _ready() -> void:
@@ -61,14 +64,85 @@ func _ready() -> void:
 	hud.travel_requested.connect(travel_to)
 	hud.power_selected.connect(select_power)
 	hud.block_selected.connect(select_block)
+	hud.admin_changed.connect(_on_admin_changed)
 	Game.friend_unlocked.connect(_on_friend_unlocked)
 
 	_load_island(Game.current_island)
 	hud.refresh_all()
 	hud.set_block(block)
+
+	# Menu de démarrage, l'île tourne en fond.
+	title = TitleMenu.new()
+	title.setup(self)
+	add_child(title)
+	title.play_requested.connect(_start_game)
+	_enter_title_camera()
+	hud.visible = false
+	hud.fade(false, 0.8)
+
+
+func _enter_title_camera() -> void:
+	_in_title = true
+	rig.distance = 34.0
+	rig.pitch = -0.62
+	rig.snap()
+
+
+func _start_game(new_game: bool) -> void:
+	if _loading:
+		return
+	_loading = true
+	await hud.fade(true, 0.4)
+	if new_game:
+		Game.reset_game()
+		_load_island("prairie")
+	title.visible = false
+	_in_title = false
+	hud.visible = true
+	hud.close_panel()
+	hud.refresh_all()
+	power = 0
 	if hud.power_unlocked(0):
 		select_power(0)
-	hud.fade(false, 0.8)
+	rig.distance = 10.0
+	rig.pitch = -0.72
+	rig.yaw = 0.0
+	rig.snap()
+	await get_tree().process_frame
+	await hud.fade(false, 0.5)
+	_loading = false
+
+
+func return_to_title() -> void:
+	if _loading:
+		return
+	_loading = true
+	await hud.fade(true, 0.4)
+	hud.close_panel()
+	player.set_flying(false)
+	hud.visible = false
+	title.show_menu()
+	_enter_title_camera()
+	await hud.fade(false, 0.5)
+	_loading = false
+
+
+func toggle_fly() -> void:
+	if not Game.admin:
+		return
+	player.set_flying(not player.flying)
+	hud.refresh_admin()
+	hud.toast("Vol activé : Espace pour monter, Ctrl pour descendre" if player.flying else "Atterrissage !", Color("d4542a"))
+
+
+func _on_admin_changed(enabled: bool) -> void:
+	if not enabled and player.flying:
+		player.set_flying(false)
+	hud.set_block(block)
+
+
+func respawn_creatures() -> void:
+	_spawn_creatures()
 
 
 # --- Mise en place -------------------------------------------------------
@@ -95,7 +169,8 @@ func _setup_environment() -> void:
 	_env.ssao_intensity = 1.6
 	_env.glow_enabled = true
 	_env.glow_intensity = 0.35
-	_env.glow_bloom = 0.04
+	_env.glow_bloom = 0.0
+	_env.glow_hdr_threshold = 1.8
 	_env.fog_enabled = true
 	_env.fog_density = 0.0025
 	_env.fog_sky_affect = 0.0
@@ -119,9 +194,9 @@ func _setup_ocean() -> void:
 	var mi := MeshInstance3D.new()
 	mi.name = "Ocean"
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(700, 700)
-	pm.subdivide_width = 200
-	pm.subdivide_depth = 200
+	pm.size = Vector2(1200, 1200)
+	pm.subdivide_width = 300
+	pm.subdivide_depth = 300
 	mi.mesh = pm
 	_ocean_mat = ShaderMaterial.new()
 	_ocean_mat.shader = load("res://shaders/ocean.gdshader")
@@ -137,7 +212,7 @@ func _setup_clouds() -> void:
 	add_child(_clouds)
 	var mat := MeshBuilder.vertex_color_material()
 	mat.roughness = 1.0
-	for i in 24:
+	for i in 50:
 		var mb := MeshBuilder.new()
 		var n := _rng.randi_range(3, 6)
 		for k in n:
@@ -158,10 +233,10 @@ func _setup_bounds() -> void:
 	var sx := float(VoxelWorld.SX)
 	var sz := float(VoxelWorld.SZ)
 	for data in [
-		[Vector3(-0.5, 20, sz * 0.5), Vector3(1, 60, sz + 2)],
-		[Vector3(sx + 0.5, 20, sz * 0.5), Vector3(1, 60, sz + 2)],
-		[Vector3(sx * 0.5, 20, -0.5), Vector3(sx + 2, 60, 1)],
-		[Vector3(sx * 0.5, 20, sz + 0.5), Vector3(sx + 2, 60, 1)],
+		[Vector3(-0.5, 40, sz * 0.5), Vector3(1, 120, sz + 2)],
+		[Vector3(sx + 0.5, 40, sz * 0.5), Vector3(1, 120, sz + 2)],
+		[Vector3(sx * 0.5, 40, -0.5), Vector3(sx + 2, 120, 1)],
+		[Vector3(sx * 0.5, 40, sz + 0.5), Vector3(sx + 2, 120, 1)],
 		[Vector3(sx * 0.5, -0.5, sz * 0.5), Vector3(sx + 2, 1, sz + 2)],
 	]:
 		var cs := CollisionShape3D.new()
@@ -216,7 +291,7 @@ func _load_island(id: String) -> void:
 		var parts: PackedStringArray = str(key).split(",")
 		if parts.size() == 3:
 			world.set_raw(int(parts[0]), int(parts[1]), int(parts[2]), int(edits[key]))
-	world.build_all()
+	world.build_all(_spawn)
 	_spawn.y = world.top_solid_y(floori(_spawn.x), floori(_spawn.z)) + 1.1
 	_apply_look(isl)
 	Audio.play_music(id)
@@ -327,15 +402,25 @@ func _on_friend_unlocked(id: String) -> void:
 
 func _process(delta: float) -> void:
 	_cooldown -= delta
-	var blocking := hud.is_blocking() or _loading
-	player.input_enabled = not blocking
-	rig.input_enabled = not blocking
-	world.set_view(player.global_position, rig.camera.global_position)
 	for cl in _clouds.get_children():
 		var n := cl as Node3D
 		n.position.x += delta * 1.2
 		if n.position.x > VoxelWorld.SX + 100.0:
 			n.position.x = -100.0
+	if _in_title:
+		rig.yaw += delta * 0.07
+		player.input_enabled = false
+		rig.input_enabled = false
+		_highlight.visible = false
+		_outline.visible = false
+		world.focus = player.global_position
+		world.set_view(Vector3(0, -1000, 0), Vector3.ZERO)
+		return
+	var blocking := hud.is_blocking() or _loading
+	player.input_enabled = not blocking
+	rig.input_enabled = not blocking
+	world.set_view(player.global_position, rig.camera.global_position)
+	world.focus = player.global_position
 	_update_creature_labels()
 	if blocking:
 		_highlight.visible = false
@@ -353,7 +438,7 @@ func _update_target() -> void:
 	var hit := world.raycast(from, dir, 80.0, _is_cut)
 	if hit["hit"]:
 		var center := Vector3(hit["pos"]) + Vector3(0.5, 0.5, 0.5)
-		if center.distance_to(player.global_position + Vector3(0, 0.7, 0)) <= REACH:
+		if center.distance_to(player.global_position + Vector3(0, 0.7, 0)) <= (ADMIN_REACH if Game.admin else REACH):
 			target = hit
 	_update_highlight()
 
@@ -441,6 +526,8 @@ func _update_creature_labels() -> void:
 
 ## Rotation caméra : clic droit ou clic molette maintenu (souris capturée).
 func _input(event: InputEvent) -> void:
+	if _in_title:
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_RIGHT or mb.button_index == MOUSE_BUTTON_MIDDLE:
@@ -461,7 +548,14 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _loading:
+	if _loading or _in_title:
+		return
+	if event.is_action_pressed("admin_toggle"):
+		hud.toggle_admin()
+		return
+	if event.is_action_pressed("fly") and not hud.is_blocking():
+		if Game.admin:
+			toggle_fly()
 		return
 	if event.is_action_pressed("ui_back"):
 		hud.back()

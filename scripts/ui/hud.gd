@@ -6,6 +6,7 @@ extends CanvasLayer
 signal travel_requested(island_id: String)
 signal power_selected(index: int)
 signal block_selected(id: int)
+signal admin_changed(enabled: bool)
 
 const TUTO := [
 	{"text": "Bienvenue sur l'Île Prairie ! Je suis le Pr. Hibou.\nCette île est encore bien calme... Grâce à tes pouvoirs, tu vas pouvoir la façonner et attirer plein de créatures !", "button": "Continuer"},
@@ -50,6 +51,9 @@ var _fade: ColorRect
 var _pause: Control
 var _skin_label: Label
 var _hint_label: Label
+var _admin_label: Label
+var _admin_button: Button
+var _admin_box: VBoxContainer
 
 var _carnet: CarnetPanel
 var _gacha: GachaPanel
@@ -86,7 +90,11 @@ func _ready() -> void:
 	_fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fade.modulate.a = 0.0
-	_root.add_child(_fade)
+	# Couche dédiée : le fondu reste visible même quand le HUD est caché.
+	var fade_layer := CanvasLayer.new()
+	fade_layer.layer = 50
+	add_child(fade_layer)
+	fade_layer.add_child(_fade)
 
 	Game.stars_changed.connect(func(_v): _refresh_top())
 	Game.stats_changed.connect(_refresh_objectives)
@@ -126,6 +134,9 @@ func _build_top_left() -> void:
 	hb.add_child(_stars_label)
 	_friends_label = UIStyle.label("", 20, UIStyle.GREEN_DARK)
 	hb.add_child(_friends_label)
+	_admin_label = UIStyle.label("", 15, Color("d4542a"))
+	_admin_label.visible = false
+	vb.add_child(_admin_label)
 
 
 func _build_objectives() -> void:
@@ -360,12 +371,63 @@ func _build_pause() -> void:
 		_pause.visible = false
 		main.reset_game())
 	body.add_child(r)
+	# Mode admin
+	_admin_button = UIStyle.button("", 18)
+	_admin_button.pressed.connect(toggle_admin)
+	body.add_child(_admin_button)
+	_admin_box = VBoxContainer.new()
+	_admin_box.add_theme_constant_override("separation", 6)
+	body.add_child(_admin_box)
+	var fly_b := UIStyle.colored_button("Voler / atterrir  (V)", Color("d4542a"), 17)
+	fly_b.pressed.connect(func():
+		_pause.visible = false
+		main.toggle_fly())
+	_admin_box.add_child(fly_b)
+	var all_b := UIStyle.button("Obtenir tous les amis", 17)
+	all_b.pressed.connect(func():
+		Game.admin_unlock_all_friends()
+		main.respawn_creatures()
+		toast("Tous les amis sont arrivés !", UIStyle.GREEN_DARK))
+	_admin_box.add_child(all_b)
+	var tuto_b := UIStyle.button("Passer le tutoriel", 17)
+	tuto_b.pressed.connect(func():
+		Game.tutorial_step = TUTO_DONE
+		refresh_all()
+		toast("Tutoriel passé."))
+	_admin_box.add_child(tuto_b)
+	var star_b := UIStyle.button("+10 000 ★", 17)
+	star_b.pressed.connect(func(): Game.add_stars(10000))
+	_admin_box.add_child(star_b)
+
+	var menu_b := UIStyle.button("Menu principal", 20)
+	menu_b.pressed.connect(func():
+		_pause.visible = false
+		Game.save_game()
+		main.return_to_title())
+	body.add_child(menu_b)
 	var q := UIStyle.button("Quitter", 20)
 	q.pressed.connect(func():
 		Game.save_game()
 		get_tree().quit())
 	body.add_child(q)
 	body.add_child(UIStyle.label("Personnages voxel : Kenney (CC0)", 12, UIStyle.TEXT_SOFT))
+	refresh_admin()
+
+
+func toggle_admin() -> void:
+	Game.admin = not Game.admin
+	Game.save_game()
+	toast("Mode admin activé : tout est débloqué !" if Game.admin else "Mode admin désactivé.", Color("d4542a"))
+	admin_changed.emit(Game.admin)
+	refresh_all()
+
+
+func refresh_admin() -> void:
+	_admin_button.text = "Mode admin : %s  (F1)" % ("ACTIVÉ" if Game.admin else "désactivé")
+	_admin_box.visible = Game.admin
+	_admin_label.visible = Game.admin
+	var flying: bool = main != null and main.player != null and main.player.flying
+	_admin_label.text = "ADMIN · " + ("EN VOL  (Espace/Ctrl, V pour atterrir)" if flying else "V : voler")
 
 
 func _volume_row(text: String, value: float, on_change: Callable) -> HBoxContainer:
@@ -395,6 +457,7 @@ func _change_skin(step: int) -> void:
 # --- Rafraîchissement ----------------------------------------------------
 
 func refresh_all() -> void:
+	refresh_admin()
 	_refresh_top()
 	_refresh_objectives()
 	_refresh_blocks()
@@ -494,7 +557,7 @@ func set_block(id: int) -> void:
 
 
 func power_unlocked(i: int) -> bool:
-	return Game.tutorial_step >= 2 + i
+	return Game.admin or Game.tutorial_step >= 2 + i
 
 
 # --- Notifications -------------------------------------------------------
@@ -589,7 +652,7 @@ func toggle_panel(which: String) -> void:
 			_open_panel = _map
 	_open_panel.name = which
 	_root.add_child(_open_panel)
-	_root.move_child(_open_panel, _fade.get_index())
+
 	_open_panel.call("open")
 	Audio.play("book" if which == "carnet" else "open", -4.0)
 	_open_panel.modulate.a = 0.0

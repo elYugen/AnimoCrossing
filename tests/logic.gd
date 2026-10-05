@@ -10,6 +10,9 @@ func _ready() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
 	await _wait(10)
+	_check(main.title.visible and main._in_title, "menu de démarrage affiché")
+	await main._start_game(true)
+	_check(not main._in_title and main.hud.visible, "partie lancée depuis le menu")
 	var hud: HUD = main.hud
 	var w: VoxelWorld = main.world
 	var sp := IslandGenerator.SPAWN
@@ -101,6 +104,28 @@ func _ready() -> void:
 	_check(Game.is_island_unlocked("corail"), "Corail débloquée")
 	await main.travel_to("corail")
 	_check(Game.current_island == "corail" and Blocks.SAND in Game.available_blocks(), "voyage Corail")
+
+	# Mode admin
+	Game.friends = {}
+	Game.stars = 0
+	_check(not Game.is_island_unlocked("braise"), "Braise verrouillée sans admin")
+	hud.toggle_admin()
+	_check(Game.admin and Game.is_island_unlocked("braise"), "admin : îles débloquées")
+	_check(Game.available_blocks().size() == Blocks.BUILD_PALETTE.size(), "admin : tous les blocs")
+	_check(Game.gacha_pull(10).size() == 10, "admin : gacha gratuit")
+	main.toggle_fly()
+	_check(main.player.flying, "admin : vol activé")
+	var y0: float = main.player.global_position.y
+	Input.action_press("jump")
+	await _wait(30)
+	Input.action_release("jump")
+	_check(main.player.global_position.y > y0 + 1.0, "admin : on monte en volant")
+	Game.admin_unlock_all_friends()
+	_check(Game.friend_count() == CreatureDB.ALL.size(), "admin : tous les amis")
+	hud.toggle_admin()
+	_check(not main.player.flying, "vol coupé en quittant l'admin")
+	await main.return_to_title()
+	_check(main._in_title and main.title.visible, "retour au menu principal")
 
 	# Audio
 	var missing := 0

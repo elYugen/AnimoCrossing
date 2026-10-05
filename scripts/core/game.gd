@@ -8,7 +8,7 @@ signal stats_changed
 signal action_done(kind: String)
 
 const SAVE_PATH := "user://animo_save.json"
-const SAVE_VERSION := 2  # v2 : îles agrandies (128x128), anciens édits invalides
+const SAVE_VERSION := 3  # v3 : îles 256x256, anciens édits invalides
 const PULL_COST := 100
 const TEN_PULL_COST := 900
 const DUPLICATE_REFUND := 25
@@ -26,6 +26,8 @@ var total_pulls := 0
 var talked := {}  # amis à qui on a parlé cette session
 var player_skin := "a"  # modèle Kenney du joueur (a..r)
 var music_volume := 0.6
+## Mode admin : tout est débloqué, gacha gratuit, vol libre (touche V).
+var admin := false
 var sfx_volume := 0.8
 
 var _autosave_timer := 0.0
@@ -73,6 +75,9 @@ func _setup_inputs() -> void:
 	_add_logical("block_next", [KEY_R])
 	_add_logical("block_prev", [KEY_F])
 	_add_logical("ui_back", [KEY_ESCAPE])
+	_add_logical("fly", [KEY_V])
+	_add_logical("admin_toggle", [KEY_F1])
+	_add_physical("fly_down", [KEY_CTRL])
 
 
 func _add_physical(action: String, keys: Array) -> void:
@@ -138,6 +143,8 @@ func friend_count() -> int:
 
 
 func is_island_unlocked(island_id: String) -> bool:
+	if admin:
+		return true
 	var isl := IslandDB.get_island(island_id)
 	return friend_count() >= int(isl["friends_needed"])
 
@@ -145,7 +152,7 @@ func is_island_unlocked(island_id: String) -> bool:
 func available_blocks() -> Array[int]:
 	var out: Array[int] = []
 	for entry in Blocks.BUILD_PALETTE:
-		if is_island_unlocked(entry["island"]):
+		if admin or is_island_unlocked(entry["island"]):
 			out.append(int(entry["id"]))
 	return out
 
@@ -185,6 +192,8 @@ func _single_pull(min_rarity: int = CreatureDB.COMMON) -> Dictionary:
 func gacha_pull(count: int) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var cost := PULL_COST if count == 1 else TEN_PULL_COST
+	if admin:
+		cost = 0
 	if stars < cost:
 		return results
 	add_stars(-cost)
@@ -224,6 +233,7 @@ func save_game() -> void:
 		"player_skin": player_skin,
 		"music_volume": music_volume,
 		"sfx_volume": sfx_volume,
+		"admin": admin,
 	}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f:
@@ -250,13 +260,30 @@ func load_game() -> void:
 	player_skin = str(parsed.get("player_skin", "a"))
 	music_volume = float(parsed.get("music_volume", 0.6))
 	sfx_volume = float(parsed.get("sfx_volume", 0.8))
+	admin = bool(parsed.get("admin", false))
 	if int(parsed.get("version", 1)) < SAVE_VERSION:
 		# Les îles ont changé de taille : on garde la progression mais
 		# les constructions de l'ancienne version ne sont plus valides.
 		edits = {}
 
 
+## Donne tous les amis (mode admin). Les amis d'île vont sur leur île,
+## ceux du gacha sur l'île actuelle.
+func admin_unlock_all_friends() -> void:
+	for c in CreatureDB.ALL:
+		if not friends.has(c["id"]):
+			var home: String = c["island"] if c["island"] != "" else current_island
+			friends[c["id"]] = {"island": home}
+			friend_unlocked.emit(c["id"])
+	save_game()
+
+
+func has_save() -> bool:
+	return FileAccess.file_exists(SAVE_PATH)
+
+
 func reset_game() -> void:
+	admin = false
 	stars = 0
 	current_island = "prairie"
 	tutorial_step = 0

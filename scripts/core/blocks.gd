@@ -54,7 +54,7 @@ static var DEFS := {
 	PALM_WOOD: {"name": "Bois de palmier", "top": Color("e2c08c"), "side": Color("b98f5e"), "bottom": Color("e2c08c")},
 	FLOWER_RED: {"name": "Fleur rouge", "deco": true, "petal": Color("ec5864")},
 	FLOWER_YELLOW: {"name": "Fleur jaune", "deco": true, "petal": Color("f9d54a")},
-	FLOWER_WHITE: {"name": "Fleur blanche", "deco": true, "petal": Color("ffffff")},
+	FLOWER_WHITE: {"name": "Fleur blanche", "deco": true, "petal": Color("f2f0e8")},
 	FLOWER_PINK: {"name": "Fleur rose", "deco": true, "petal": Color("f7a3c8")},
 	FLOWER_BLUE: {"name": "Fleur bleue", "deco": true, "petal": Color("74aef7")},
 	FLOWER_PURPLE: {"name": "Fleur violette", "deco": true, "petal": Color("ae84e6")},

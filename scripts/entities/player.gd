@@ -16,6 +16,8 @@ var world: VoxelWorld
 var input_enabled := true
 var respawn_point := Vector3.ZERO
 var distance_walked := 0.0
+## Vol libre (mode admin) : Espace pour monter, Ctrl pour descendre.
+var flying := false
 
 var _pivot: Node3D
 var _model: Node3D
@@ -124,10 +126,17 @@ func _physics_process(delta: float) -> void:
 	var dir := Vector3(input.x, 0, input.y).rotated(Vector3.UP, yaw)
 	var sprint := input_enabled and Input.is_key_pressed(KEY_SHIFT)
 	var target_v := dir * SPEED * (1.5 if sprint else 1.0)
+	if flying:
+		target_v *= 2.2
 	velocity.x = move_toward(velocity.x, target_v.x, ACCEL * SPEED * delta)
 	velocity.z = move_toward(velocity.z, target_v.z, ACCEL * SPEED * delta)
 
-	if not is_on_floor():
+	if flying:
+		var up := 0.0
+		if input_enabled:
+			up = Input.get_action_strength("jump") - Input.get_action_strength("fly_down")
+		velocity.y = move_toward(velocity.y, up * SPEED * (2.6 if sprint else 1.6), ACCEL * SPEED * delta)
+	elif not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	elif input_enabled and Input.is_action_just_pressed("jump"):
 		velocity.y = JUMP
@@ -136,7 +145,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	# Saut automatique sur les marches d'un bloc.
-	if world and is_on_floor() and is_on_wall() and dir.length() > 0.1 and velocity.y <= 0.0:
+	if world and not flying and is_on_floor() and is_on_wall() and dir.length() > 0.1 and velocity.y <= 0.0:
 		var ahead := global_position + dir.normalized() * 0.55
 		var fx := floori(ahead.x)
 		var fz := floori(ahead.z)
@@ -152,7 +161,7 @@ func _physics_process(delta: float) -> void:
 
 	# Bruits de pas selon le sol.
 	var hspeed := Vector2(velocity.x, velocity.z).length()
-	if is_on_floor() and hspeed > 0.5 and world:
+	if is_on_floor() and hspeed > 0.5 and world and not flying:
 		_step_timer -= delta * hspeed / SPEED
 		if _step_timer <= 0.0:
 			_step_timer = 0.36
@@ -165,13 +174,19 @@ func _physics_process(delta: float) -> void:
 	_action_timer -= delta
 	if _action_timer <= 0.0:
 		var speed := Vector2(velocity.x, velocity.z).length()
-		if speed > SPEED * 1.2:
+		if flying:
+			_play("idle" if speed < 0.5 else "sprint")
+		elif speed > SPEED * 1.2:
 			_play("sprint")
 		elif speed > 0.5:
 			_play("walk")
 		else:
 			_play("idle")
 
+	# Pendant le vol, on garde le joueur dans les limites du ciel.
+	if flying and global_position.y > VoxelWorld.SY + 25.0:
+		global_position.y = VoxelWorld.SY + 25.0
+		velocity.y = minf(velocity.y, 0.0)
 	if global_position.y < -8.0:
 		teleport(respawn_point)
 
@@ -184,6 +199,13 @@ static func _step_sound(b: int) -> String:
 	if b in [Blocks.STONE, Blocks.BRICK, Blocks.BASALT, Blocks.MOSS, Blocks.CLAY]:
 		return "step_stone"
 	return "step_grass"
+
+
+func set_flying(v: bool) -> void:
+	flying = v
+	velocity.y = 0.0
+	# Petite lévitation visuelle.
+	_pivot.position.y = 0.15 if v else 0.0
 
 
 func teleport(p: Vector3) -> void:

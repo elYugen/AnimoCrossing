@@ -11,6 +11,8 @@ func _ready() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
 	await _wait(60)
+	await _shot("00_title")
+	await main._start_game(false)
 	var w: VoxelWorld = main.world
 	# 1. Derrière un arbre : la caméra doit voir le joueur à travers.
 	var trunk := _find(w, Blocks.WOOD, 6)
@@ -31,9 +33,10 @@ func _ready() -> void:
 	await _wait(30)
 	await _shot("11_ruin")
 	# 3. Vue d'ensemble.
-	main.player.teleport(Vector3(64, 30, 64))
+	main.player.teleport(Vector3(128, 30, 128))
 	main.rig.pitch = -1.0
 	main.rig.distance = 28.0
+	main.rig.pitch = -1.1
 	main.rig.snap()
 	await _wait(40)
 	await _shot("12_overview")

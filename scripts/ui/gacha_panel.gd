@@ -91,9 +91,9 @@ func open() -> void:
 
 
 func _refresh() -> void:
-	_stars.text = "★ %d Étoiles" % Game.stars
-	_btn1.disabled = _busy or Game.stars < Game.PULL_COST
-	_btn10.disabled = _busy or Game.stars < Game.TEN_PULL_COST
+	_stars.text = "★ %d Étoiles" % Game.stars + ("  ·  ADMIN : gratuit" if Game.admin else "")
+	_btn1.disabled = _busy or (not Game.admin and Game.stars < Game.PULL_COST)
+	_btn10.disabled = _busy or (not Game.admin and Game.stars < Game.TEN_PULL_COST)
 
 
 func _pull(count: int) -> void:
