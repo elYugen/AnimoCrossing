@@ -18,6 +18,8 @@ var respawn_point := Vector3.ZERO
 var distance_walked := 0.0
 ## Vol libre (mode admin) : Espace pour monter, Ctrl pour descendre.
 var flying := false
+## Allongé (cinématique du naufrage) : pas de mouvement ni d'animation auto.
+var lying := false
 
 var _pivot: Node3D
 var _model: Node3D
@@ -37,35 +39,54 @@ func _ready() -> void:
 	add_child(col)
 	_pivot = Node3D.new()
 	add_child(_pivot)
-	set_skin(Game.player_skin)
+	set_skin(Game.player_skin, Game.player_head)
 	floor_snap_length = 0.3
 	floor_max_angle = deg_to_rad(50)
 
 
-func set_skin(letter: String) -> void:
+## Tenue (`letter`) et tête/coiffure (`head`) : deux personnages Kenney
+## peuvent être mélangés, la tête de l'un sur le corps de l'autre.
+func set_skin(letter: String, head := "") -> void:
 	if _model:
 		_model.queue_free()
 		_model = null
 		_anim_player = null
-	var path := SKIN_PATH % letter
-	var scene := load(path) as PackedScene
-	if scene == null:
-		push_warning("Modèle joueur introuvable : %s" % path)
+	_model = build_model(letter, head)
+	if _model == null:
 		return
-	_model = scene.instantiate() as Node3D
 	_pivot.add_child(_model)
-	# Normalise la taille du modèle.
-	var aabb := _compute_aabb(_model)
-	if aabb.size.y > 0.01:
-		var s := MODEL_HEIGHT / aabb.size.y
-		_model.scale = Vector3.ONE * s
-		_model.position.y = -aabb.position.y * s
 	_anim_player = _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	if _anim_player:
 		for loop_name in ["idle", "walk", "sprint"]:
 			if _anim_player.has_animation(loop_name):
 				_anim_player.get_animation(loop_name).loop_mode = Animation.LOOP_LINEAR
 		_play("idle")
+
+
+## Instancie un personnage Kenney (tenue `letter`, tête `head`) à la bonne taille.
+static func build_model(letter: String, head := "") -> Node3D:
+	var path := SKIN_PATH % letter
+	var scene := load(path) as PackedScene
+	if scene == null:
+		push_warning("Modèle joueur introuvable : %s" % path)
+		return null
+	var model := scene.instantiate() as Node3D
+	# Normalise la taille (sur la tête d'origine : la taille ne dépend pas de la coiffure).
+	var aabb := _compute_aabb(model)
+	if aabb.size.y > 0.01:
+		var sc := MODEL_HEIGHT / aabb.size.y
+		model.scale = Vector3.ONE * sc
+		model.position.y = -aabb.position.y * sc
+	if head != "" and head != letter:
+		var hs := load(SKIN_PATH % head) as PackedScene
+		if hs:
+			var other := hs.instantiate() as Node3D
+			var src := other.find_child("head", true, false) as MeshInstance3D
+			var dst := model.find_child("head", true, false) as MeshInstance3D
+			if src and dst:
+				dst.mesh = src.mesh
+			other.free()
+	return model
 
 
 static func _compute_aabb(root: Node3D) -> AABB:
@@ -118,6 +139,39 @@ func face_towards(p: Vector3) -> void:
 		_facing = atan2(d.x, d.z)
 
 
+## Pose allongée sur le dos (naufrage), la tête du côté de `head_dir`.
+func set_lying(head_dir: Vector3) -> void:
+	lying = true
+	_facing = atan2(-head_dir.x, -head_dir.z)
+	_pivot.rotation = Vector3(-PI / 2.0, _facing, 0)
+	_pivot.position.y = 0.22
+	if _anim_player and _anim_player.has_animation("static"):
+		_anim_player.play("static", 0.0)
+
+
+## Se relève (animation procédurale), puis regarde vers `face_dir`.
+func stand_up(duration := 1.3) -> void:
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(_pivot, "rotation:x", 0.0, duration).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(_pivot, "position:y", 0.0, duration * 0.8).set_trans(Tween.TRANS_SINE)
+	_play("idle", 0.3)
+	await tw.finished
+	lying = false
+
+
+## Tourne le personnage vers une direction (cinématiques).
+func turn_to(angle: float, duration := 0.6) -> void:
+	var tw := create_tween()
+	tw.tween_method(func(a: float): _facing = a, _facing, _facing + wrapf(angle - _facing, -PI, PI), duration).set_trans(Tween.TRANS_SINE)
+	await tw.finished
+
+
+func play_anim(anim: String) -> void:
+	if _anim_player and _anim_player.has_animation(anim):
+		_anim_player.play(anim, 0.15)
+		_action_timer = _anim_player.get_animation(anim).length
+
+
 func _physics_process(delta: float) -> void:
 	var input := Vector2.ZERO
 	if input_enabled:
@@ -157,6 +211,8 @@ func _physics_process(delta: float) -> void:
 
 	if dir.length() > 0.1:
 		_facing = atan2(dir.x, dir.z)
+	if lying:
+		return
 	_pivot.rotation.y = lerp_angle(_pivot.rotation.y, _facing, minf(1.0, delta * 12.0))
 
 	# Bruits de pas selon le sol.

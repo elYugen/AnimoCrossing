@@ -6,6 +6,23 @@ const SEA := 6
 const SPAWN := Vector2i(120, 172)
 const CENTER := 127.5
 const RADIUS := 112.0
+## Montagne de l'Île Prairie (visible depuis la plage du naufrage).
+const PRAIRIE_PEAK := Vector2(138, 62)
+## Vitalité de l'Île Prairie nécessaire pour dégager l'accès à la montagne.
+const MOUNTAIN_UNLOCK := 40
+
+## Plage du naufrage (Île Prairie) : {"pos": Vector3 (sol), "out": Vector3 (vers le large)}.
+static var beach := {}
+## Petit point d'eau entre la plage et le campement (centre, au niveau de l'eau).
+static var pond := Vector3.ZERO
+## Campement abandonné (Île Prairie) : centre au sol, position du coffre.
+static var camp := {}
+## Objets 3D générés (arbres, épave, ruines...) : {"kind", "pos", "rot", "scale", "key"}.
+static var props: Array[Dictionary] = []
+
+
+static func _prop(kind: String, pos: Vector3, rot: float, scale_mul: float, key: String) -> void:
+	props.append({"kind": kind, "pos": pos, "rot": rot, "scale": scale_mul, "key": key})
 
 const FLOWER_SETS := {
 	"prairie": [Blocks.FLOWER_RED, Blocks.FLOWER_YELLOW, Blocks.FLOWER_WHITE, Blocks.FLOWER_PINK, Blocks.FLOWER_BLUE, Blocks.FLOWER_PURPLE],
@@ -18,6 +35,7 @@ const FLOWER_SETS := {
 ## Génère l'île dans `world` et renvoie la position d'apparition du joueur.
 static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 	world.clear()
+	props.clear()
 	var biome: String = island["biome"]
 	var seed_v: int = island["seed"]
 	var rng := RandomNumberGenerator.new()
@@ -31,6 +49,8 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 	warp.frequency = 0.04
 	var heights := PackedInt32Array()
 	heights.resize(VoxelWorld.SX * VoxelWorld.SZ)
+	var peak_map := PackedFloat32Array()  # relief ajouté au-delà de la limite habituelle
+	peak_map.resize(VoxelWorld.SX * VoxelWorld.SZ)
 	var cone_map := PackedFloat32Array()
 	cone_map.resize(VoxelWorld.SX * VoxelWorld.SZ)
 	var raw := PackedFloat32Array()
@@ -69,6 +89,9 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 					if vd < 7.0:
 						h -= (7.0 - vd) * 1.6
 			raw[x + z * VoxelWorld.SX] = h
+			if island["id"] == "prairie":
+				var mk := clampf(1.0 - Vector2(x, z).distance_to(PRAIRIE_PEAK) / 44.0, 0.0, 1.0)
+				peak_map[x + z * VoxelWorld.SX] = pow(mk, 1.5) * 27.0 + mk * hn * 5.0
 			cone_map[x + z * VoxelWorld.SX] = cone
 
 	# Clairière plate autour du point d'apparition, à la hauteur naturelle
@@ -87,7 +110,8 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 			if sd < 8.0:
 				var t := clampf((8.0 - sd) / 3.5, 0.0, 1.0)
 				h = lerpf(h, target, t)
-			heights[x + z * VoxelWorld.SX] = clampi(floori(h), 1, VoxelWorld.SY - 12)
+			var hh := clampi(floori(h), 1, VoxelWorld.SY - 12)
+			heights[x + z * VoxelWorld.SX] = mini(hh + floori(peak_map[x + z * VoxelWorld.SX]), VoxelWorld.SY - 3)
 
 	# Remplissage des colonnes.
 	for z in VoxelWorld.SZ:
@@ -118,6 +142,30 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 			for dx in range(-1, 2):
 				world.set_raw(SPAWN.x + 4 + dx, sh, SPAWN.y - 2 + dz, Blocks.DIRT)
 
+	# Plage du naufrage : épave et ruines englouties.
+	beach = {}
+	camp = {}
+	pond = Vector3.ZERO
+	if island["id"] == "prairie":
+		beach = _find_beach(heights)
+		_place_wreck(world, heights, beach, seed_v + 99)
+		heights = _place_pond(world, heights)
+		_place_camp(world, heights)
+
+	# Éboulement qui ferme la montagne (nouvelle zone à débloquer).
+	if island["id"] == "prairie" and not Game.has_flag("zone_mountain"):
+		var steps := 90
+		for i in steps:
+			var a := TAU * i / steps
+			var x := floori(PRAIRIE_PEAK.x + cos(a) * 41.0)
+			var z := floori(PRAIRIE_PEAK.y + sin(a) * 41.0)
+			if x < 2 or z < 2 or x >= VoxelWorld.SX - 2 or z >= VoxelWorld.SZ - 2:
+				continue
+			var h := heights[x + z * VoxelWorld.SX]
+			if h <= SEA:
+				continue
+			_prop("barrier_rock", Vector3(x + 0.5, h + 1, z + 0.5), a * 3.7, 1.0 + fmod(i * 0.37, 0.4), "g:z:%d" % i)
+
 	# Ruines de maisons.
 	var ruins := _place_ruins(world, heights, biome, rng, 32)
 
@@ -137,15 +185,18 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 					world.set_raw(x + dx, y + 1, z + dz, rock)
 		world.set_raw(x, y + 2, z, rock)
 
-	# Arbres.
-	var tree_count := {"prairie": 240, "plage": 160, "givre": 280, "braise": 260}
+	# Arbres (modèles 3D) et petite végétation.
+	var tree_count := {"prairie": 230, "plage": 150, "givre": 260, "braise": 240}
+	var kinds: Array = Props.TREES[biome]
+	var taken := {}  # cellules 3x3 occupées (espacement)
 	var placed := 0
 	var attempts := 0
 	while placed < int(tree_count[biome]) and attempts < 10000:
 		attempts += 1
 		var x := rng.randi_range(4, VoxelWorld.SX - 5)
 		var z := rng.randi_range(4, VoxelWorld.SZ - 5)
-		if _near_spawn(x, z, 10) or _in_rects(ruins, x, z, 3):
+		if _near_spawn(x, z, 10) or _in_rects(ruins, x, z, 3) or _near_beach(x, z, 8.0) \
+				or (pond != Vector3.ZERO and Vector2(x - pond.x, z - pond.z).length() < 6.0):
 			continue
 		var y := world.top_solid_y(x, z)
 		if y <= SEA:
@@ -155,10 +206,32 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 			continue
 		if biome == "plage" and y > SEA + 4 and rng.randf() < 0.5:
 			continue
-		if _has_wood_near(world, x, y + 1, z, 3):
+		var cell := Vector2i(x / 3, z / 3)
+		var crowded := false
+		for dz in range(-1, 2):
+			for dx in range(-1, 2):
+				var o = taken.get(cell + Vector2i(dx, dz))
+				if o != null and Vector2(o).distance_to(Vector2(x, z)) < 3.3:
+					crowded = true
+		if crowded:
 			continue
-		if grow_tree(world, x, y + 1, z, tree_style(biome, rng), rng, false):
-			placed += 1
+		taken[cell] = Vector2i(x, z)
+		if Blocks.is_deco(world.get_block(x, y + 1, z)):
+			world.set_raw(x, y + 1, z, Blocks.AIR)
+		_prop(kinds[rng.randi() % kinds.size()], Vector3(x + 0.5, y + 1, z + 0.5), rng.randf() * TAU, rng.randf_range(0.85, 1.2), "g:t:%d,%d" % [x, z])
+		placed += 1
+	var small := {"prairie": ["bush", "bush_large", "mushroom", "log", "stump"], "plage": ["bush", "bush_large"],
+		"givre": ["log", "stump"], "braise": ["bush", "mushroom", "log", "stump"]}
+	var smalls: Array = small[biome]
+	for i in 90:
+		var x := rng.randi_range(6, VoxelWorld.SX - 7)
+		var z := rng.randi_range(6, VoxelWorld.SZ - 7)
+		var y := world.top_solid_y(x, z)
+		if y <= SEA + 1 or _near_spawn(x, z, 8) or _in_rects(ruins, x, z, 1) or taken.has(Vector2i(x / 3, z / 3)):
+			continue
+		if not world.get_block(x, y, z) in [Blocks.GRASS, Blocks.SAND, Blocks.SNOW, Blocks.DIRT]:
+			continue
+		_prop(smalls[rng.randi() % smalls.size()], Vector3(x + 0.5, y + 1, z + 0.5), rng.randf() * TAU, rng.randf_range(0.8, 1.2), "g:s:%d,%d" % [x, z])
 
 	# Fleurs et herbes hautes.
 	var flowers: Array = FLOWER_SETS[biome]
@@ -177,6 +250,8 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 			elif r < float(flower_chance[biome]) + float(grass_chance[biome]):
 				world.set_raw(x, y + 1, z, Blocks.TALL_GRASS)
 
+	_place_pollution(world, heights, island, seed_v + 777)
+
 	var spawn_y := world.top_solid_y(SPAWN.x, SPAWN.y) + 1
 	return Vector3(SPAWN.x + 0.5, spawn_y + 0.1, SPAWN.y + 0.5)
 
@@ -193,7 +268,6 @@ static func _place_ruins(world: VoxelWorld, heights: PackedInt32Array, biome: St
 	var wall: int = m[0]
 	var wall_alt: int = m[1]
 	var floor_b: int = m[2]
-	var beam: int = m[3]
 	var rects: Array[Rect2i] = []
 	var attempts := 0
 	while rects.size() < count and attempts < 1500:
@@ -204,6 +278,8 @@ static func _place_ruins(world: VoxelWorld, heights: PackedInt32Array, biome: St
 		var z0 := rng.randi_range(8, VoxelWorld.SZ - 9 - d)
 		var rect := Rect2i(x0, z0, w, d)
 		if _near_spawn(x0 + w / 2, z0 + d / 2, 14):
+			continue
+		if pond != Vector3.ZERO and Vector2(x0 + w / 2 - pond.x, z0 + d / 2 - pond.z).length() < 10.0:
 			continue
 		var overlap := false
 		for r in rects:
@@ -232,37 +308,14 @@ static func _place_ruins(world: VoxelWorld, heights: PackedInt32Array, biome: St
 					world.set_raw(x, y, z, wall)
 				var edge_x := x == x0 or x == x0 + w - 1
 				var edge_z := z == z0 or z == z0 + d - 1
-				var corner := edge_x and edge_z
 				# Sol (troué par endroits).
 				world.set_raw(x, base, z, floor_b if rng.randf() < 0.8 else wall_alt)
 				for y in range(base + 1, base + 5):
 					world.set_raw(x, y, z, Blocks.AIR)
-				if not (edge_x or edge_z):
-					if rng.randf() < 0.18:
-						world.set_raw(x, base + 1, z, Blocks.TALL_GRASS if biome != "givre" else Blocks.SNOW)
-					continue
-				# Porte au milieu d'un côté.
-				var mid_x := x0 + w / 2
-				var mid_z := z0 + d / 2
-				var is_door := (door_side == 0 and z == z0 and x == mid_x) or (door_side == 1 and z == z0 + d - 1 and x == mid_x) 					or (door_side == 2 and x == x0 and z == mid_z) or (door_side == 3 and x == x0 + w - 1 and z == mid_z)
-				if is_door:
-					continue
-				var hh := 0
-				if corner:
-					hh = rng.randi_range(2, 4)
-				else:
-					var r := rng.randf()
-					hh = 0 if r < 0.22 else (1 if r < 0.5 else (2 if r < 0.82 else 3))
-				for k in hh:
-					world.set_raw(x, base + 1 + k, z, wall_alt if rng.randf() < 0.3 else wall)
-				if biome == "givre" and hh > 0:
-					world.set_raw(x, base + 1 + hh, z, Blocks.SNOW)
-		# Une vieille poutre qui traverse.
-		if rng.randf() < 0.6:
-			var bz := z0 + rng.randi_range(1, d - 2)
-			for x in range(x0, x0 + w):
-				if rng.randf() < 0.75:
-					world.set_raw(x, base + 4, bz, beam)
+				if not (edge_x or edge_z) and rng.randf() < 0.18:
+					world.set_raw(x, base + 1, z, Blocks.TALL_GRASS if biome != "givre" else Blocks.SNOW)
+			# Murs effondrés (Fantasy Town Kit) : segments de 2 blocs le long des bords.
+		_ruin_walls(Rect2i(x0, z0, w, d), base + 1, door_side, biome, rng)
 		# Débris tombés autour.
 		for i in rng.randi_range(3, 7):
 			var fx := x0 + rng.randi_range(-2, w + 1)
@@ -275,6 +328,43 @@ static func _place_ruins(world: VoxelWorld, heights: PackedInt32Array, biome: St
 	return rects
 
 
+## Murs en ruine d'une maison : segments cassés, demi-murs, piliers aux coins.
+static func _ruin_walls(r: Rect2i, y: int, door_side: int, biome: String, rng: RandomNumberGenerator) -> void:
+	var wood := biome == "plage"
+	# [début du bord, direction le long du bord, normale extérieure, longueur]
+	var sides := [
+		[Vector2(r.position.x, r.position.y + 0.5), Vector2(1, 0), Vector2(0, -1), r.size.x],
+		[Vector2(r.position.x, r.end.y - 0.5), Vector2(1, 0), Vector2(0, 1), r.size.x],
+		[Vector2(r.position.x + 0.5, r.position.y), Vector2(0, 1), Vector2(-1, 0), r.size.y],
+		[Vector2(r.end.x - 0.5, r.position.y), Vector2(0, 1), Vector2(1, 0), r.size.y],
+	]
+	for si in 4:
+		var sd: Array = sides[si]
+		var start: Vector2 = sd[0]
+		var along: Vector2 = sd[1]
+		var outward: Vector2 = sd[2]
+		var length: int = sd[3]
+		var segs := length / 2
+		for k in segs:
+			if si == door_side and k == segs / 2:
+				continue  # l'entrée
+			var roll := rng.randf()
+			if roll < 0.2:
+				continue
+			var kind := "wall_broken"
+			if roll < 0.45:
+				kind = "wall_half"
+			elif wood or roll > 0.9:
+				kind = "wall_wood_broken"
+			# Le panneau du modèle est sur son bord +X : on le tourne vers l'extérieur.
+			var mid := start + along * (k * 2 + 1.0) - outward * 0.92
+			var rot := atan2(-outward.y, outward.x)
+			_prop(kind, Vector3(mid.x, y, mid.y), rot, 1.0, "g:r:%d,%d:%d:%d" % [r.position.x, r.position.y, si, k])
+	for c in [r.position, Vector2i(r.end.x - 1, r.position.y), Vector2i(r.position.x, r.end.y - 1), r.end - Vector2i.ONE]:
+		if rng.randf() < 0.75:
+			_prop("pillar", Vector3(c.x + 0.5, y, c.y + 0.5), 0.0, rng.randf_range(0.7, 1.2), "g:p:%d,%d" % [c.x, c.y])
+
+
 static func _top_block(biome: String, h: int, hn: float, cone: float) -> int:
 	if h <= SEA:
 		return Blocks.STONE if biome == "givre" else Blocks.SAND
@@ -282,6 +372,10 @@ static func _top_block(biome: String, h: int, hn: float, cone: float) -> int:
 		return Blocks.SNOW if biome == "givre" else Blocks.SAND
 	match biome:
 		"prairie":
+			if h >= SEA + 25:
+				return Blocks.SNOW
+			if h >= SEA + 17:
+				return Blocks.STONE
 			return Blocks.GRASS
 		"plage":
 			return Blocks.GRASS if (hn > 0.55 and h > SEA + 2) else Blocks.SAND
@@ -290,6 +384,225 @@ static func _top_block(biome: String, h: int, hn: float, cone: float) -> int:
 		"braise":
 			return Blocks.BASALT if cone > 0.42 else Blocks.GRASS
 	return Blocks.GRASS
+
+
+static func _near_beach(x: int, z: int, r: float) -> bool:
+	if beach.is_empty():
+		return false
+	var p: Vector3 = beach["pos"]
+	return Vector2(x - p.x, z - p.z).length() < r
+
+
+## Part du point d'apparition vers le large et s'arrête sur le dernier
+## bloc de sable sec avant l'eau.
+static func _find_beach(heights: PackedInt32Array) -> Dictionary:
+	var dir := (Vector2(SPAWN) - Vector2(CENTER, CENTER)).normalized()
+	var p := Vector2(SPAWN) + Vector2(0.5, 0.5)
+	var dry := p
+	var water_run := 0.0
+	for i in 400:
+		p += dir * 0.5
+		var x := floori(p.x)
+		var z := floori(p.y)
+		if x < 3 or z < 3 or x >= VoxelWorld.SX - 3 or z >= VoxelWorld.SZ - 3:
+			break
+		if heights[x + z * VoxelWorld.SX] <= SEA:
+			# Le large (et pas un simple lagon) : beaucoup d'eau d'affilée.
+			water_run += 0.5
+			if water_run >= 14.0:
+				break
+		else:
+			water_run = 0.0
+			dry = p
+	var bx := floori(dry.x)
+	var bz := floori(dry.y)
+	var h := heights[bx + bz * VoxelWorld.SX]
+	return {"pos": Vector3(bx + 0.5, h + 1, bz + 0.5), "out": Vector3(dir.x, 0, dir.y), "cell": Vector2i(bx, bz)}
+
+
+## Épave du bateau échouée dans les vagues, planches sur le sable et
+## vieilles ruines à moitié englouties de part et d'autre de la plage.
+static func _place_wreck(world: VoxelWorld, heights: PackedInt32Array, b: Dictionary, seed_v: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_v
+	var cell: Vector2i = b["cell"]
+	var o: Vector3 = b["out"]
+	# Axes « cardinaux » : vers le large et le long du rivage.
+	var out := Vector2i(signi(roundi(o.x)), 0) if absf(o.x) > absf(o.z) else Vector2i(0, signi(roundi(o.z)))
+	if out == Vector2i.ZERO:
+		out = Vector2i(0, 1)
+	var side := Vector2i(-out.y, out.x)
+	var at := func(u: int, v: int) -> Vector2i: return cell + out * u + side * v
+	var ground := func(c: Vector2i) -> int:
+		if c.x < 0 or c.y < 0 or c.x >= VoxelWorld.SX or c.y >= VoxelWorld.SZ:
+			return 0
+		return heights[c.x + c.y * VoxelWorld.SX]
+
+	# Caisses, tonneaux et une barque rejetés sur le sable (Pirate Kit).
+	var flotsam := ["crate", "barrel", "crate", "barrel", "rowboat", "crate"]
+	for i in flotsam.size():
+		var c: Vector2i = at.call(rng.randi_range(-4, 1), rng.randi_range(-7, 7))
+		if (c - cell).length() < 3.0:
+			continue
+		var g: int = ground.call(c)
+		if g < SEA:
+			continue
+		_prop(flotsam[i], Vector3(c.x + 0.5, g + 1, c.y + 0.5), rng.randf() * TAU, rng.randf_range(0.9, 1.1), "g:f:%d" % i)
+
+	# L'épave du bateau, échouée dans les vagues.
+	var hc: Vector2i = at.call(10, 4)
+	var side_v := Vector2(side)
+	_prop("wreck", Vector3(hc.x + 0.5, SEA - 0.4, hc.y + 0.5), atan2(side_v.x, side_v.y) + 0.35, 1.15, "g:wreck")
+
+	# Ruines englouties : colonnes, une tête de statue et un obélisque.
+	for sgn in [-1, 1]:
+		var base: Vector2i = at.call(rng.randi_range(5, 8), sgn * rng.randi_range(13, 16))
+		for k in 4:
+			var c: Vector2i = base + side * (k * 3 * sgn)
+			var g: int = ground.call(c)
+			var kind := "column" if k == 1 or k == 2 else "column_broken"
+			_prop(kind, Vector3(c.x + 0.5, g + 1, c.y + 0.5), rng.randf() * TAU, rng.randf_range(0.9, 1.1), "g:c:%d:%d" % [sgn, k])
+	var tw: Vector2i = at.call(17, -6)
+	_prop("statue_head", Vector3(tw.x + 0.5, ground.call(tw) + 1, tw.y + 0.5), atan2(-float(out.x), -float(out.y)) + 0.4, 1.3, "g:head")
+	var ob: Vector2i = at.call(14, 9)
+	_prop("obelisk", Vector3(ob.x + 0.5, ground.call(ob) + 1, ob.y + 0.5), 0.3, 1.2, "g:obelisk")
+
+
+## Creuse une petite mare (l'océan, sous l'île, affleure au fond).
+static func _place_pond(world: VoxelWorld, heights: PackedInt32Array) -> PackedInt32Array:
+	var b: Vector3 = beach["pos"]
+	var sp := Vector2(SPAWN) + Vector2(0.5, 0.5)
+	var dir := (sp - Vector2(b.x, b.z)).normalized()
+	# Près de la plage, là où le terrain est bas : l'eau affleure presque.
+	var c := Vector2(b.x, b.z).lerp(sp, 0.3) + Vector2(-dir.y, dir.x) * 7.0
+	for dz in range(-6, 7):
+		for dx in range(-6, 7):
+			var x := floori(c.x) + dx
+			var z := floori(c.y) + dz
+			var d := Vector2(dx / 3.4, dz / 2.6).length()
+			if d > 1.75 or x < 1 or z < 1 or x >= VoxelWorld.SX - 1 or z >= VoxelWorld.SZ - 1:
+				continue
+			var i := x + z * VoxelWorld.SX
+			var h := heights[i]
+			var floor_y := SEA - 3 if d < 0.6 else SEA - 2
+			if d > 1.0:
+				floor_y = mini(h, SEA + floori((d - 1.0) * 2.5))  # berges en pente
+			if floor_y >= h:
+				continue
+			for y in range(floor_y + 1, h + 1):
+				world.set_raw(x, y, z, Blocks.AIR)
+			world.set_raw(x, floor_y, z, Blocks.SAND if d <= 1.0 else (Blocks.MOSS if (dx + dz) % 3 == 0 else Blocks.GRASS))
+			heights[i] = floor_y
+	pond = Vector3(floori(c.x) + 0.5, SEA + 0.75, floori(c.y) + 0.5)
+	return heights
+
+
+## Le campement abandonné, dans la clairière du point d'apparition :
+## une vieille tente, un établi cassé, un feu de camp éteint, une clôture.
+## Le coffre et les outils rouillés sont des objets (voir CampProps).
+static func _place_camp(world: VoxelWorld, heights: PackedInt32Array) -> void:
+	var sx := SPAWN.x
+	var sz := SPAWN.y
+	var g := heights[sx + sz * VoxelWorld.SX]
+	var put := func(dx: int, dy: int, dz: int, id: int) -> void:
+		world.set_raw(sx + dx, g + dy, sz + dz, id)
+	var at := func(dx: float, dz: float) -> Vector3: return Vector3(sx + 0.5 + dx, g + 1, sz + 0.5 + dz)
+	_prop("tent", at.call(-4.0, -5.5), PI, 1.0, "g:camp:tent")
+	_prop("bedroll", at.call(-1.8, -6.5), 0.4, 1.0, "g:camp:bed")
+	_prop("workbench", at.call(-3.5, 2.5), 0.2, 1.0, "g:camp:bench")
+	_prop("box", at.call(-5.2, 2.0), 0.6, 1.0, "g:camp:box")
+	_prop("box_large", at.call(-5.0, 3.6), -0.3, 1.0, "g:camp:box2")
+	_prop("barrel_old", at.call(-2.0, 4.2), 0.0, 1.0, "g:camp:barrel")
+	_prop("campfire_old", at.call(1.0, 4.0), 0.0, 1.0, "g:camp:fire")
+	_prop("log", at.call(2.6, 5.0), 1.2, 1.0, "g:camp:log")
+	_prop("signpost", at.call(4.0, 7.0), 0.5, 1.0, "g:camp:sign")
+	# Restes de clôture.
+	for a in [0.3, 0.9, 1.5, 2.2, 2.9, 3.4, 4.9, 5.6]:
+		_prop("fence_broken", at.call(cos(a) * 7.5, sin(a) * 7.5), -a, 1.0, "g:camp:fence%d" % roundi(a * 10))
+	camp = {"center": Vector3(sx + 0.5, g + 1, sz + 0.5), "chest": Vector3(sx - 0.5, g + 1, sz - 1.5), "ground": g + 1}
+
+
+## Déchets sur la terre ferme et vase sur les points d'eau : les retirer
+## rend l'île plus accueillante. Les quantités servent de cibles à la vitalité.
+static func _place_pollution(world: VoxelWorld, heights: PackedInt32Array, island: Dictionary, seed_v: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_v
+	var waste := 0
+	var water := 0
+	var pile := func(x: int, z: int) -> int:
+		var y := world.top_solid_y(x, z)
+		if y <= SEA or y >= VoxelWorld.SY - 3:
+			return 0
+		if not world.get_block(x, y, z) in [Blocks.GRASS, Blocks.SAND, Blocks.DIRT, Blocks.SNOW, Blocks.BASALT, Blocks.MOSS, Blocks.STONE]:
+			return 0
+		if Blocks.is_deco(world.get_block(x, y + 1, z)):
+			world.set_raw(x, y + 1, z, Blocks.AIR)
+		world.set_raw(x, y + 1, z, Blocks.DEBRIS)
+		var n := 1
+		if rng.randf() < 0.45:
+			var d: Vector2i = [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)].pick_random()
+			if world.top_solid_y(x + d.x, z + d.y) == y:
+				world.set_raw(x + d.x, y + 1, z + d.y, Blocks.DEBRIS)
+				n += 1
+		if rng.randf() < 0.2:
+			world.set_raw(x, y + 2, z, Blocks.DEBRIS)
+			n += 1
+		return n
+	# Un peu partout sur l'île.
+	var placed := 0
+	for attempt in 600:
+		if placed >= 34:
+			break
+		var x := rng.randi_range(10, VoxelWorld.SX - 11)
+		var z := rng.randi_range(10, VoxelWorld.SZ - 11)
+		if _near_spawn(x, z, 9):
+			continue
+		var n: int = pile.call(x, z)
+		if n > 0:
+			waste += n
+			placed += 1
+	# Autour du campement et de l'épave (Île Prairie) : de quoi commencer.
+	if island["id"] == "prairie":
+		var spots: Array[Vector2] = []
+		for i in 6:
+			var a := rng.randf() * TAU
+			spots.append(Vector2(SPAWN) + Vector2(cos(a), sin(a)) * rng.randf_range(9.5, 13.0))
+		if not beach.is_empty():
+			var b: Vector3 = beach["pos"]
+			for i in 6:
+				var a := rng.randf() * TAU
+				spots.append(Vector2(b.x, b.z) + Vector2(cos(a), sin(a)) * rng.randf_range(3.0, 9.0))
+		for sp in spots:
+			waste += pile.call(floori(sp.x), floori(sp.y))
+	# Vase : sur la mare et dans les lagons à l'intérieur de l'île.
+	var cells: Array[Vector2i] = []
+	for z in range(8, VoxelWorld.SZ - 8, 2):
+		for x in range(8, VoxelWorld.SX - 8, 2):
+			if heights[x + z * VoxelWorld.SX] > SEA - 1:
+				continue
+			if Vector2(x - CENTER, z - CENTER).length() > RADIUS * 0.72:
+				continue
+			cells.append(Vector2i(x, z))
+	if pond != Vector3.ZERO:
+		cells.push_front(Vector2i(floori(pond.x), floori(pond.z)))
+	var patches := 0
+	for c in cells:
+		if patches >= 12:
+			break
+		if patches > 0 and rng.randf() > 0.08:
+			continue
+		patches += 1
+		for dz in range(-2, 3):
+			for dx in range(-2, 3):
+				if dx * dx + dz * dz > 5 or rng.randf() < 0.3:
+					continue
+				var x := c.x + dx
+				var z := c.y + dz
+				if heights[x + z * VoxelWorld.SX] >= SEA or world.get_block(x, SEA, z) != Blocks.AIR:
+					continue
+				world.set_raw(x, SEA, z, Blocks.SLUDGE)
+				water += 1
+	Game.island_totals[island["id"]] = {"waste": waste, "water": water}
 
 
 static func _in_rects(rects: Array[Rect2i], x: int, z: int, margin: int) -> bool:
@@ -301,109 +614,3 @@ static func _in_rects(rects: Array[Rect2i], x: int, z: int, margin: int) -> bool
 
 static func _near_spawn(x: int, z: int, r: float) -> bool:
 	return Vector2(x - SPAWN.x, z - SPAWN.y).length() < r
-
-
-static func _has_wood_near(world: VoxelWorld, x: int, y: int, z: int, r: int) -> bool:
-	for dx in range(-r, r + 1):
-		for dz in range(-r, r + 1):
-			for dy in range(-2, 3):
-				var b := world.get_block(x + dx, y + dy, z + dz)
-				if b == Blocks.WOOD or b == Blocks.PALM_WOOD:
-					return true
-	return false
-
-
-static func tree_style(biome: String, rng: RandomNumberGenerator) -> String:
-	match biome:
-		"plage":
-			return "palm"
-		"givre":
-			return "pine"
-		"braise":
-			return "autumn" if rng.randf() < 0.75 else "oak"
-	return "blossom" if rng.randf() < 0.25 else "oak"
-
-
-static func _put(world: VoxelWorld, x: int, y: int, z: int, id: int, live: bool) -> void:
-	if not VoxelWorld.in_bounds(x, y, z):
-		return
-	var cur := world.get_block(x, y, z)
-	if cur != Blocks.AIR and not Blocks.is_deco(cur):
-		return
-	if live:
-		world.set_block(Vector3i(x, y, z), id)
-	else:
-		world.set_raw(x, y, z, id)
-
-
-## Fait pousser un arbre dont le tronc commence en (x, y, z).
-## `live` = modification du joueur (enregistrée et remaillée).
-static func grow_tree(world: VoxelWorld, x: int, y: int, z: int, style: String, rng: RandomNumberGenerator, live: bool) -> bool:
-	var trunk_h := rng.randi_range(4, 5)
-	if style == "pine":
-		trunk_h = rng.randi_range(5, 7)
-	elif style == "palm":
-		trunk_h = rng.randi_range(5, 6)
-	if y + trunk_h + 3 >= VoxelWorld.SY:
-		return false
-	for i in trunk_h:
-		var b := world.get_block(x, y + i, z)
-		if b != Blocks.AIR and not Blocks.is_deco(b):
-			return false
-	match style:
-		"pine":
-			for i in trunk_h:
-				_put(world, x, y + i, z, Blocks.WOOD, live)
-			var top := y + trunk_h
-			var layers := [2, 2, 1, 1, 0]
-			var start := top - 4
-			for li in layers.size():
-				var r: int = layers[li]
-				var ly := start + li
-				for dx in range(-r, r + 1):
-					for dz in range(-r, r + 1):
-						if r == 2 and abs(dx) == 2 and abs(dz) == 2:
-							continue
-						if dx == 0 and dz == 0 and ly < top:
-							continue
-						_put(world, x + dx, ly, z + dz, Blocks.PINE_LEAVES, live)
-			_put(world, x, top + 1, z, Blocks.PINE_LEAVES, live)
-			_put(world, x, top + 2, z, Blocks.SNOW, live)
-		"palm":
-			var lean := Vector2i([1, -1].pick_random(), 0) if rng.randf() < 0.5 else Vector2i(0, [1, -1].pick_random())
-			var tx := x
-			var tz := z
-			for i in trunk_h:
-				if i == 3:
-					tx += lean.x
-					tz += lean.y
-				_put(world, tx, y + i, tz, Blocks.PALM_WOOD, live)
-			var top := y + trunk_h
-			_put(world, tx, top, tz, Blocks.PALM_LEAVES, live)
-			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1)]:
-				var arm := 2 if abs(d.x) + abs(d.y) == 2 else 3
-				for k in range(1, arm + 1):
-					var ly := top if k < arm else top - 1
-					_put(world, tx + d.x * k, ly, tz + d.y * k, Blocks.PALM_LEAVES, live)
-		_:
-			var leaf := Blocks.LEAVES
-			if style == "autumn":
-				leaf = Blocks.AUTUMN_LEAVES
-			elif style == "blossom":
-				leaf = Blocks.WOOL
-			for i in trunk_h:
-				_put(world, x, y + i, z, Blocks.WOOD, live)
-			var cy := y + trunk_h - 1
-			for dy in range(-1, 3):
-				var r := 2 if dy < 1 else 1
-				for dx in range(-r, r + 1):
-					for dz in range(-r, r + 1):
-						if dx == 0 and dz == 0 and dy < 1:
-							continue
-						var dist := dx * dx + dz * dz
-						if r == 2 and dist >= 8 and rng.randf() < 0.7:
-							continue
-						if dy == 2 and dist > 0 and rng.randf() < 0.5:
-							continue
-						_put(world, x + dx, cy + dy, z + dz, leaf, live)
-	return true

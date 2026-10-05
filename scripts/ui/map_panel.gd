@@ -50,11 +50,7 @@ func _card(isl: Dictionary) -> PanelContainer:
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	d.custom_minimum_size = Vector2(210, 60)
 	vb.add_child(d)
-	var friends_here := 0
-	for c in CreatureDB.island_creatures(isl["id"]):
-		if Game.friends.has(c["id"]):
-			friends_here += 1
-	vb.add_child(UIStyle.label("Amis de l'île : %d / 5" % friends_here, 15))
+	vb.add_child(UIStyle.label("Habitants : %d  ·  Vitalité %d %%" % [Vitality.residents(isl["id"]), Vitality.percent(isl["id"])], 15))
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(spacer)
@@ -67,7 +63,7 @@ func _card(isl: Dictionary) -> PanelContainer:
 		b.pressed.connect(func(): travel_requested.emit(isl["id"]))
 		vb.add_child(b)
 	else:
-		var b := UIStyle.button("Verrouillée · %d amis" % int(isl["friends_needed"]), 16)
+		var b := UIStyle.button("Verrouillée · %d amis" % int(isl["residents_needed"]), 16)
 		b.disabled = true
 		vb.add_child(b)
 	return p

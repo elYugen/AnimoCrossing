@@ -1,0 +1,20 @@
+# Arrivée d'un nouvel habitant, le lendemain matin.
+# Le nom affiché est celui de l'habitant.
+
+~ premiere
+Oh...
+Cette île n'était pas comme ça hier.
+Je crois que je vais rester un peu.
+=> END
+
+~ arrivee
+% Oh ! Il y a quelqu'un ici ? Cette île a l'air si accueillante...
+% J'ai vu l'île changer depuis la mer. Je peux m'installer ?
+% Quel endroit agréable ! Je crois que je vais rester un peu.
+% On m'a dit qu'il faisait bon vivre par ici. C'était vrai !
+% Je ne pensais pas trouver quelqu'un ici...
+% Cette île semble avoir changé.
+% Il y a vraiment des gens qui vivent ici maintenant ?
+% Je crois que je vais rester quelque temps.
+Merci de m'accueillir !
+=> END

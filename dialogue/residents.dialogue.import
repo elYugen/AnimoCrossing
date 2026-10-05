@@ -1,0 +1,16 @@
+[remap]
+
+importer="dialogue_manager"
+importer_version=18
+type="Resource"
+uid="uid://c0tb1u0i4bb0d"
+path="res://.godot/imported/residents.dialogue-cb1b9c12dbe07feea97d1d4d3fb5412c.tres"
+
+[deps]
+
+source_file="res://dialogue/residents.dialogue"
+dest_files=["res://.godot/imported/residents.dialogue-cb1b9c12dbe07feea97d1d4d3fb5412c.tres"]
+
+[params]
+
+defaults=true

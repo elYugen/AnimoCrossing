@@ -1,32 +1,58 @@
 extends Node
-## État global du jeu : monnaie, amis, statistiques par île, modifications
-## du monde, gacha, tutoriel et sauvegarde.
+## État global du jeu : inventaire, habitants, statistiques par île,
+## modifications du monde, progression et sauvegarde.
 
-signal stars_changed(value: int)
-signal friend_unlocked(id: String)
+signal resident_arrived(id: String)
 signal stats_changed
 signal action_done(kind: String)
+signal inventory_changed
 
 const SAVE_PATH := "user://animo_save.json"
-const SAVE_VERSION := 3  # v3 : îles 256x256, anciens édits invalides
-const PULL_COST := 100
-const TEN_PULL_COST := 900
-const DUPLICATE_REFUND := 25
-const FRIEND_REWARD := 50
-const LEGENDARY_PITY := 30
+const SAVE_VERSION := 6  # v6 : habitants humains, composants et constructions
 
-var stars := 0
 var current_island := "prairie"
 var tutorial_step := 0
-var friends := {}  # id -> {"island": String}
+## Objets : ressources ramassées et composants fabriqués (voir Items).
+var inventory := {}
+## Constructions fabriquées, prêtes à être posées (type d'objet Props -> quantité).
+var structures := {}
+## Espèces animales déjà apparues.
+var species_seen := {}
+## Blocs possédés (id en texte -> quantité) : on ne pose que ce qu'on a cassé ou fabriqué.
+var blocks := {}
+## Recettes déjà annoncées au joueur.
+var recipes_seen := {}
+## Découvertes de l'histoire : "water", "camp", "chest".
+var flags := {}
+## Jour en cours (on passe au lendemain en dormant).
+var day := 1
+## Heure de la journée (0-24) et météo en cours (voir SkyCycle).
+var time := 8.0
+var weather := "clear"
+var weather_left := 4.0  # heures avant le prochain changement de temps
+## Quantités générées par île (déchets, vase) : cibles de la vitalité.
+var island_totals := {}
+## Objets 3D ajoutés / retirés par le joueur, par île (voir Props).
+var props_added := {}
+var props_removed := {}
+## Chantiers en cours, par île (voir Worksites).
+var sites := {}
+## Ressources ramassées (île -> {"x,z": {"d": jour, "k": type}}), qui repoussent.
+var picked := {}
+## Qui habite où : clé de la maison (objet Props) -> id d'habitant ou "player".
+var homes := {}
+## Intérieurs personnalisés : clé de la maison -> [{"f": meuble, "x", "z", "r"}].
+var interiors := {}
+var residents := {}  # id -> {"island": String}
 var stats := {}  # island_id -> {stat: int}
 var edits := {}  # island_id -> {"x,y,z": block_id}
-var pity := 0
-var total_pulls := 0
-var talked := {}  # amis à qui on a parlé cette session
-var player_skin := "a"  # modèle Kenney du joueur (a..r)
+var talked := {}  # habitants à qui on a parlé cette session
+var player_skin := "a"  # tenue : modèle Kenney du joueur (a..r)
+var player_head := "a"  # tête / coiffure : modèle Kenney (a..r)
+var player_name := ""
+var mouse_sensitivity := 0.0028
 var music_volume := 0.6
-## Mode admin : tout est débloqué, gacha gratuit, vol libre (touche V).
+## Mode admin : tout est débloqué, fabrication gratuite, vol libre (touche V).
 var admin := false
 var sfx_volume := 0.8
 
@@ -70,14 +96,17 @@ func _setup_inputs() -> void:
 	_add_physical("power_4", [KEY_4, KEY_KP_4])
 	_add_logical("interact", [KEY_E])
 	_add_logical("carnet", [KEY_C])
-	_add_logical("gacha", [KEY_G])
 	_add_logical("map", [KEY_M])
+	_add_logical("inventory", [KEY_I, KEY_TAB])
 	_add_logical("block_next", [KEY_R])
 	_add_logical("block_prev", [KEY_F])
+	_add_logical("rotate", [KEY_T])
+	_add_logical("assign", [KEY_G])
 	_add_logical("ui_back", [KEY_ESCAPE])
 	_add_logical("fly", [KEY_V])
 	_add_logical("admin_toggle", [KEY_F1])
 	_add_physical("fly_down", [KEY_CTRL])
+	_add_physical("free_cursor", [KEY_ALT])
 
 
 func _add_physical(action: String, keys: Array) -> void:
@@ -98,12 +127,47 @@ func _add_logical(action: String, keys: Array) -> void:
 		InputMap.action_add_event(action, ev)
 
 
-# --- Monnaie & stats -----------------------------------------------------
+# --- Inventaire & découvertes -------------------------------------------
 
-func add_stars(amount: int) -> void:
-	stars = max(0, stars + amount)
-	stars_changed.emit(stars)
+func add_item(kind: String, amount := 1) -> void:
+	inventory[kind] = item_count(kind) + amount
+	inventory_changed.emit()
 
+
+func item_count(kind: String) -> int:
+	return int(inventory.get(kind, 0))
+
+
+func block_count(id: int) -> int:
+	return int(blocks.get(str(id), 0))
+
+
+func add_block(id: int, amount := 1) -> void:
+	blocks[str(id)] = maxi(0, block_count(id) + amount)
+	inventory_changed.emit()
+
+
+func structure_count(kind: String) -> int:
+	return int(structures.get(kind, 0))
+
+
+func add_structure(kind: String, amount := 1) -> void:
+	structures[kind] = maxi(0, structure_count(kind) + amount)
+	inventory_changed.emit()
+
+
+func has_flag(f: String) -> bool:
+	return bool(flags.get(f, false))
+
+
+func set_flag(f: String) -> void:
+	if has_flag(f):
+		return
+	flags[f] = true
+	action_done.emit("flag_" + f)
+
+
+# --- Statistiques & habitants ---------------------------------------------
 
 func get_stat(island_id: String, stat: String) -> int:
 	var s: Dictionary = stats.get(island_id, {})
@@ -114,102 +178,58 @@ func add_stat(stat: String, amount: int = 1) -> void:
 	var s: Dictionary = stats.get_or_add(current_island, {})
 	s[stat] = int(s.get(stat, 0)) + amount
 	stats_changed.emit()
-	check_unlocks()
 
 
 func notify_action(kind: String) -> void:
 	action_done.emit(kind)
 
 
-func check_unlocks() -> void:
-	for c in CreatureDB.island_creatures(current_island):
-		if friends.has(c["id"]):
-			continue
-		if get_stat(current_island, c["stat"]) >= int(c["amount"]):
-			unlock_friend(c["id"], current_island)
-
-
-func unlock_friend(id: String, island_id: String) -> void:
-	if friends.has(id):
+func add_resident(id: String, island_id: String) -> void:
+	if residents.has(id):
 		return
-	friends[id] = {"island": island_id}
-	add_stars(FRIEND_REWARD)
-	friend_unlocked.emit(id)
+	residents[id] = {"island": island_id, "since": day, "pts": 0}
+	resident_arrived.emit(id)
 	save_game()
 
 
-func friend_count() -> int:
-	return friends.size()
+## Maison d'un habitant ("" : sans maison).
+func home_of(owner: String) -> String:
+	for k in homes:
+		if homes[k] == owner:
+			return k
+	return ""
+
+
+## Attribue une maison (un seul occupant par maison, une maison par occupant).
+func set_home(house_key: String, owner: String) -> void:
+	for k in homes.keys():
+		if homes[k] == owner and owner != "":
+			homes.erase(k)
+	if owner == "":
+		homes.erase(house_key)
+	else:
+		homes[house_key] = owner
+	save_game()
+
+
+func resident_count() -> int:
+	return residents.size()
 
 
 func is_island_unlocked(island_id: String) -> bool:
 	if admin:
 		return true
 	var isl := IslandDB.get_island(island_id)
-	return friend_count() >= int(isl["friends_needed"])
+	return resident_count() >= int(isl["residents_needed"])
 
 
 func available_blocks() -> Array[int]:
 	var out: Array[int] = []
 	for entry in Blocks.BUILD_PALETTE:
-		if admin or is_island_unlocked(entry["island"]):
-			out.append(int(entry["id"]))
+		var id := int(entry["id"])
+		if admin or block_count(id) > 0:
+			out.append(id)
 	return out
-
-
-# --- Gacha ---------------------------------------------------------------
-
-func _roll_rarity() -> int:
-	var r := randf()
-	if r < 0.05:
-		return CreatureDB.LEGENDARY
-	if r < 0.30:
-		return CreatureDB.RARE
-	return CreatureDB.COMMON
-
-
-func _single_pull(min_rarity: int = CreatureDB.COMMON) -> Dictionary:
-	pity += 1
-	total_pulls += 1
-	var rarity: int = max(_roll_rarity(), min_rarity)
-	if pity >= LEGENDARY_PITY:
-		rarity = CreatureDB.LEGENDARY
-	if rarity == CreatureDB.LEGENDARY:
-		pity = 0
-	var pool := CreatureDB.gacha_pool(rarity)
-	var c: Dictionary = pool.pick_random()
-	var id: String = c["id"]
-	var is_new := not friends.has(id)
-	if is_new:
-		friends[id] = {"island": current_island}
-		friend_unlocked.emit(id)
-	else:
-		add_stars(DUPLICATE_REFUND)
-	return {"id": id, "new": is_new, "rarity": rarity}
-
-
-## Renvoie la liste des résultats, ou [] si pas assez d'étoiles.
-func gacha_pull(count: int) -> Array[Dictionary]:
-	var results: Array[Dictionary] = []
-	var cost := PULL_COST if count == 1 else TEN_PULL_COST
-	if admin:
-		cost = 0
-	if stars < cost:
-		return results
-	add_stars(-cost)
-	for i in count:
-		# Le dernier tirage d'un x10 garantit au moins un Rare.
-		var min_r := CreatureDB.COMMON
-		if count == 10 and i == count - 1:
-			var has_rare := false
-			for r in results:
-				if int(r["rarity"]) >= CreatureDB.RARE:
-					has_rare = true
-			if not has_rare:
-				min_r = CreatureDB.RARE
-		results.append(_single_pull(min_r))
-	save_game()
-	return results
 
 
 # --- Sauvegarde ----------------------------------------------------------
@@ -222,15 +242,32 @@ func record_edit(island_id: String, pos: Vector3i, id: int) -> void:
 func save_game() -> void:
 	var data := {
 		"version": SAVE_VERSION,
-		"stars": stars,
 		"current_island": current_island,
 		"tutorial_step": tutorial_step,
-		"friends": friends,
+		"inventory": inventory,
+		"structures": structures,
+		"species_seen": species_seen,
+		"blocks": blocks,
+		"recipes_seen": recipes_seen,
+		"flags": flags,
+		"day": day,
+		"time": time,
+		"weather": weather,
+		"weather_left": weather_left,
+		"island_totals": island_totals,
+		"props_added": props_added,
+		"props_removed": props_removed,
+		"sites": sites,
+		"homes": homes,
+		"picked": picked,
+		"interiors": interiors,
+		"residents": residents,
 		"stats": stats,
 		"edits": edits,
-		"pity": pity,
-		"total_pulls": total_pulls,
 		"player_skin": player_skin,
+		"player_head": player_head,
+		"player_name": player_name,
+		"mouse_sensitivity": mouse_sensitivity,
 		"music_volume": music_volume,
 		"sfx_volume": sfx_volume,
 		"admin": admin,
@@ -249,32 +286,58 @@ func load_game() -> void:
 	var parsed = JSON.parse_string(f.get_as_text())
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return
-	stars = int(parsed.get("stars", 0))
 	current_island = str(parsed.get("current_island", "prairie"))
 	tutorial_step = int(parsed.get("tutorial_step", 0))
-	friends = parsed.get("friends", {})
+	inventory = parsed.get("inventory", {})
+	structures = parsed.get("structures", {})
+	species_seen = parsed.get("species_seen", {})
+	blocks = parsed.get("blocks", {})
+	recipes_seen = parsed.get("recipes_seen", {})
+	flags = parsed.get("flags", {})
+	day = int(parsed.get("day", 1))
+	time = float(parsed.get("time", 8.0))
+	weather = str(parsed.get("weather", "clear"))
+	weather_left = float(parsed.get("weather_left", 4.0))
+	island_totals = parsed.get("island_totals", {})
+	props_added = parsed.get("props_added", {})
+	props_removed = parsed.get("props_removed", {})
+	sites = parsed.get("sites", {})
+	homes = parsed.get("homes", {})
+	picked = parsed.get("picked", {})
+	interiors = parsed.get("interiors", {})
+	residents = parsed.get("residents", parsed.get("friends", {}))
+	# Les anciens « amis » (animaux, gacha) n'existent plus.
+	for id in residents.keys():
+		if ResidentDB.get_resident(id).is_empty():
+			residents.erase(id)
 	stats = parsed.get("stats", {})
 	edits = parsed.get("edits", {})
-	pity = int(parsed.get("pity", 0))
-	total_pulls = int(parsed.get("total_pulls", 0))
 	player_skin = str(parsed.get("player_skin", "a"))
+	player_head = str(parsed.get("player_head", player_skin))
+	player_name = str(parsed.get("player_name", ""))
+	mouse_sensitivity = float(parsed.get("mouse_sensitivity", 0.0028))
 	music_volume = float(parsed.get("music_volume", 0.6))
 	sfx_volume = float(parsed.get("sfx_volume", 0.8))
 	admin = bool(parsed.get("admin", false))
-	if int(parsed.get("version", 1)) < SAVE_VERSION:
-		# Les îles ont changé de taille : on garde la progression mais
+	var version := int(parsed.get("version", 1))
+	if version < 4:
+		# Les îles ont changé : on garde la progression mais
 		# les constructions de l'ancienne version ne sont plus valides.
 		edits = {}
+		# v4 : nouvelle introduction (exploration + campement) avant les pouvoirs.
+		if tutorial_step >= 9:
+			flags = {"water": true, "camp": true, "chest": true}
+	if version < 6:
+		# v6 : nouvelle suite de missions ; une ancienne partie avancée la saute.
+		tutorial_step = 99 if tutorial_step >= 7 else mini(tutorial_step, 3)
 
 
-## Donne tous les amis (mode admin). Les amis d'île vont sur leur île,
-## ceux du gacha sur l'île actuelle.
-func admin_unlock_all_friends() -> void:
-	for c in CreatureDB.ALL:
-		if not friends.has(c["id"]):
-			var home: String = c["island"] if c["island"] != "" else current_island
-			friends[c["id"]] = {"island": home}
-			friend_unlocked.emit(c["id"])
+## Fait venir tous les habitants possibles sur l'île actuelle (mode admin).
+func admin_all_residents() -> void:
+	for c in ResidentDB.ALL:
+		if not residents.has(c["id"]) and ResidentDB.can_live_on(c, current_island):
+			residents[c["id"]] = {"island": current_island}
+			resident_arrived.emit(c["id"])
 	save_game()
 
 
@@ -284,14 +347,29 @@ func has_save() -> bool:
 
 func reset_game() -> void:
 	admin = false
-	stars = 0
 	current_island = "prairie"
 	tutorial_step = 0
-	friends = {}
+	inventory = {}
+	structures = {}
+	species_seen = {}
+	blocks = {}
+	recipes_seen = {}
+	flags = {}
+	day = 1
+	time = 8.0
+	weather = "clear"
+	weather_left = 4.0
+	island_totals = {}
+	props_added = {}
+	props_removed = {}
+	sites = {}
+	homes = {}
+	interiors = {}
+	picked = {}
+	residents = {}
 	stats = {}
 	edits = {}
-	pity = 0
-	total_pulls = 0
 	talked = {}
+	player_name = ""
 	if FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))

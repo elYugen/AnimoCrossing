@@ -1,0 +1,92 @@
+# Répliques des habitants. {f} : un meuble, {n} et {item} : une demande.
+
+~ nouveau
+% Je ne pensais pas rester ici longtemps.
+% Tout est encore nouveau pour moi ici.
+% J'ai l'impression d'avoir trouvé un coin tranquille.
+=> END
+
+~ installe
+% Tu sais... je crois que je n'arriverais plus à repartir maintenant.
+% Cette île, c'est un peu chez moi maintenant.
+% Je me demande comment j'ai pu vivre ailleurs.
+=> END
+
+~ pluie
+% Quelle pluie ! Les plantes doivent être ravies.
+% J'aime bien le bruit de la pluie sur les toits.
+% Un temps à rester bien au chaud...
+=> END
+
+~ nuit
+% Il se fait tard... Je vais bientôt rentrer.
+% Les étoiles sont belles ce soir.
+% Tu ne dors pas encore ?
+=> END
+
+~ matin
+% Bonjour ! Bien dormi ?
+% Le matin, l'île sent si bon.
+% Belle journée qui commence !
+=> END
+
+~ belle_ile
+% L'île devient vraiment belle, grâce à toi.
+% Je n'en reviens pas de tout ce que tu as fait ici.
+% Chaque jour, l'île a l'air un peu plus vivante.
+=> END
+
+~ sans_maison
+% Je dors près du feu en attendant d'avoir un toit...
+% Une petite maison à moi, ce serait le rêve.
+=> END
+
+~ demenage
+J'aime bien ma nouvelle maison !
+=> END
+
+~ cadeau_aime
+% Oh ! C'est exactement ce que j'aime ! Merci !
+% Tu as deviné ! J'adore ça !
+=> END
+
+~ cadeau
+% Merci, c'est gentil !
+% Oh, un cadeau ? Merci beaucoup !
+=> END
+
+~ deja_cadeau
+Tu m'as déjà offert quelque chose aujourd'hui... Merci quand même !
+=> END
+
+~ donne
+% Tiens, j'ai trouvé ça. C'est pour toi !
+% J'en avais en trop, prends-les !
+=> END
+
+~ demande
+Dis... tu pourrais m'apporter {n} {item} ? Ça me rendrait service.
+=> END
+
+~ demande_ok
+Merci infiniment ! Tiens, prends ça en échange.
+=> END
+
+~ meuble_unique
+Je t'ai fabriqué quelque chose. J'espère que ça te plaira !
+=> END
+
+~ ami
+Tu sais... ton amitié compte énormément pour moi.
+Je suis content d'être venu sur cette île.
+=> END
+
+~ meuble_aime
+% J'adore {f} ! C'est exactement ce qu'il me fallait !
+% {f} ! J'en ai toujours rêvé !
+=> END
+
+~ meuble
+% Merci pour {f} ! Ma maison est bien plus agréable.
+% Tu as ajouté {f} chez moi ? C'est adorable !
+=> END

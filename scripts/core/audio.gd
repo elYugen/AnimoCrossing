@@ -26,6 +26,7 @@ var _next := 0
 var _music_a: AudioStreamPlayer
 var _music_b: AudioStreamPlayer
 var _current_music := ""
+var _stop_tween: Tween
 
 
 func _ready() -> void:
@@ -94,6 +95,8 @@ func play_music(island_id: String) -> void:
 	if island_id == _current_music or not MUSIC.has(island_id):
 		return
 	_current_music = island_id
+	if _stop_tween:
+		_stop_tween.kill()
 	var stream := load(MUSIC[island_id]) as AudioStream
 	if stream == null:
 		return
@@ -112,3 +115,17 @@ func play_music(island_id: String) -> void:
 	tw.tween_property(_music_a, "volume_db", -8.0, 2.0)
 	tw.tween_property(_music_b, "volume_db", -60.0, 1.5)
 	tw.chain().tween_callback(_music_b.stop)
+
+
+## Coupe la musique en fondu (ex. pendant l'introduction).
+func stop_music(duration := 1.5) -> void:
+	_current_music = ""
+	if _stop_tween:
+		_stop_tween.kill()
+	var tw := create_tween().set_parallel(true)
+	_stop_tween = tw
+	for p in [_music_a, _music_b]:
+		tw.tween_property(p, "volume_db", -60.0, duration)
+	tw.chain().tween_callback(func():
+		_music_a.stop()
+		_music_b.stop())

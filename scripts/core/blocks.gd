@@ -21,6 +21,10 @@ const CLAY := 15
 const WOOL := 16
 const MOSS := 17
 const PALM_WOOD := 18
+## Déchets (débris, détritus) : à retirer pour rendre l'île accueillante.
+const DEBRIS := 19
+## Vase qui encombre les points d'eau.
+const SLUDGE := 20
 
 const FLOWER_RED := 30
 const FLOWER_YELLOW := 31
@@ -29,6 +33,8 @@ const FLOWER_PINK := 33
 const FLOWER_BLUE := 34
 const FLOWER_PURPLE := 35
 const TALL_GRASS := 36
+const CAMPFIRE := 37
+const GARDEN := 38
 
 const FLOWERS: Array[int] = [FLOWER_RED, FLOWER_YELLOW, FLOWER_WHITE, FLOWER_PINK, FLOWER_BLUE, FLOWER_PURPLE]
 
@@ -52,6 +58,8 @@ static var DEFS := {
 	WOOL: {"name": "Laine rose", "top": Color("f9c4d8"), "side": Color("f6b6cf"), "bottom": Color("e8a3be")},
 	MOSS: {"name": "Pierre moussue", "top": Color("78ad5e"), "side": Color("8f9c88"), "bottom": Color("80897a")},
 	PALM_WOOD: {"name": "Bois de palmier", "top": Color("e2c08c"), "side": Color("b98f5e"), "bottom": Color("e2c08c")},
+	DEBRIS: {"name": "Déchets", "top": Color("6e665c"), "side": Color("5b5148"), "bottom": Color("4d453d")},
+	SLUDGE: {"name": "Vase", "top": Color("6d8546"), "side": Color("5a6e3a"), "bottom": Color("4b5c30")},
 	FLOWER_RED: {"name": "Fleur rouge", "deco": true, "petal": Color("ec5864")},
 	FLOWER_YELLOW: {"name": "Fleur jaune", "deco": true, "petal": Color("f9d54a")},
 	FLOWER_WHITE: {"name": "Fleur blanche", "deco": true, "petal": Color("f2f0e8")},
@@ -59,27 +67,29 @@ static var DEFS := {
 	FLOWER_BLUE: {"name": "Fleur bleue", "deco": true, "petal": Color("74aef7")},
 	FLOWER_PURPLE: {"name": "Fleur violette", "deco": true, "petal": Color("ae84e6")},
 	TALL_GRASS: {"name": "Herbes hautes", "deco": true, "petal": Color("6fc052")},
+	CAMPFIRE: {"name": "Feu de camp", "deco": true, "petal": Color("ff8a2a")},
+	GARDEN: {"name": "Potager", "deco": true, "petal": Color("7cc95a")},
 }
 
-## Blocs posables et île à partir de laquelle ils sont disponibles.
+## Blocs posables (dans l'ordre de la barre). On ne pose que ceux qu'on possède.
 const BUILD_PALETTE := [
-	{"id": GRASS, "island": "prairie"},
-	{"id": DIRT, "island": "prairie"},
-	{"id": STONE, "island": "prairie"},
-	{"id": PLANK, "island": "prairie"},
-	{"id": WOOD, "island": "prairie"},
-	{"id": LEAVES, "island": "prairie"},
-	{"id": WOOL, "island": "prairie"},
-	{"id": SAND, "island": "corail"},
-	{"id": CLAY, "island": "corail"},
-	{"id": PALM_WOOD, "island": "corail"},
-	{"id": SNOW, "island": "givree"},
-	{"id": ICE, "island": "givree"},
-	{"id": MOSS, "island": "givree"},
-	{"id": BASALT, "island": "braise"},
-	{"id": BRICK, "island": "braise"},
-	{"id": AUTUMN_LEAVES, "island": "braise"},
+	{"id": GRASS}, {"id": DIRT}, {"id": SAND}, {"id": STONE}, {"id": MOSS}, {"id": PLANK},
+	{"id": WOOD}, {"id": PALM_WOOD}, {"id": LEAVES}, {"id": WOOL}, {"id": CLAY}, {"id": BRICK},
+	{"id": SNOW}, {"id": ICE}, {"id": BASALT}, {"id": AUTUMN_LEAVES}, {"id": PINE_LEAVES},
+	{"id": PALM_LEAVES},
 ]
+
+
+## Ce que rapporte un bloc cassé (-1 : rien).
+static func drop_of(id: int) -> int:
+	match id:
+		GRASS:
+			return DIRT
+		DEBRIS, SLUDGE, AIR:
+			return -1
+	if is_deco(id):
+		return -1
+	return id
 
 
 static func is_solid(id: int) -> bool:

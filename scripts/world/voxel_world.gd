@@ -288,6 +288,31 @@ func _emit_deco(mb: MeshBuilder, x: int, y: int, z: int, id: int) -> void:
 	var cx := x + 0.5 + ox
 	var cz := z + 0.5 + oz
 	var petal: Color = Blocks.DEFS[id]["petal"]
+	if id == Blocks.CAMPFIRE:
+		# Bûches croisées, cercle de pierres et flammes.
+		var fx := x + 0.5
+		var fz := z + 0.5
+		var log := Color("8a5a3b")
+		mb.add_box(Vector3(fx, y + 0.07, fz), Vector3(0.7, 0.13, 0.14), log)
+		mb.add_box(Vector3(fx, y + 0.12, fz), Vector3(0.14, 0.13, 0.7), log.darkened(0.1))
+		for a in 8:
+			var d := Vector3(cos(a * TAU / 8.0), 0, sin(a * TAU / 8.0)) * 0.4
+			mb.add_box(Vector3(fx, y + 0.06, fz) + d, Vector3(0.14, 0.12, 0.14), Color("9aa0a8"))
+		mb.add_box(Vector3(fx, y + 0.3, fz), Vector3(0.26, 0.3, 0.26), Color("ff7a2a"), false)
+		mb.add_box(Vector3(fx + 0.04, y + 0.42, fz - 0.03), Vector3(0.16, 0.3, 0.16), Color("ffb03a"), false)
+		mb.add_box(Vector3(fx - 0.02, y + 0.55, fz + 0.02), Vector3(0.08, 0.16, 0.08), Color("ffe27a"), false)
+		return
+	if id == Blocks.GARDEN:
+		# Potager : terre retournée, pousses et fanes de carottes.
+		mb.add_box(Vector3(x + 0.5, y + 0.04, z + 0.5), Vector3(0.9, 0.08, 0.9), Color("7a5236"))
+		for i in 3:
+			for j in 2:
+				var px := x + 0.22 + i * 0.28
+				var pz := z + 0.3 + j * 0.4
+				mb.add_box(Vector3(px, y + 0.1, pz), Vector3(0.1, 0.06, 0.1), Color("f08a3a"))
+				mb.add_box(Vector3(px, y + 0.22, pz), Vector3(0.05, 0.2, 0.05), petal)
+				mb.add_box(Vector3(px + 0.05, y + 0.27, pz), Vector3(0.1, 0.04, 0.06), petal.lightened(0.1))
+		return
 	if id == Blocks.TALL_GRASS:
 		mb.add_box(Vector3(cx - 0.12, y + 0.2, cz), Vector3(0.08, 0.4, 0.08), petal)
 		mb.add_box(Vector3(cx + 0.1, y + 0.27, cz + 0.08), Vector3(0.08, 0.54, 0.08), petal.lightened(0.1))

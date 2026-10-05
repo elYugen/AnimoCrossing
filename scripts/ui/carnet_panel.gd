@@ -1,7 +1,7 @@
 class_name CarnetPanel
 extends Control
-## Carnet des amis : collection de toutes les créatures, avec leurs
-## conditions d'arrivée et leur progression.
+## Carnet : les habitants possibles, rangés par environnement (forêt,
+## jardins, mer, montagne, village), et les animaux déjà apparus.
 
 signal closed
 
@@ -13,13 +13,13 @@ var _desc: Label
 var _req: Label
 var _bar: ProgressBar
 var _count: Label
-var _tab := "prairie"
+var _tab := "forest"
 var _tab_buttons := {}
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var m := UIStyle.modal("Carnet des amis", Vector2(980, 600))
+	var m := UIStyle.modal("Carnet", Vector2(980, 600))
 	add_child(m["root"])
 	(m["close"] as Button).pressed.connect(func(): closed.emit())
 	var body: VBoxContainer = m["body"]
@@ -29,9 +29,9 @@ func _ready() -> void:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
 	body.add_child(tabs)
-	for isl in IslandDB.ISLANDS:
-		_add_tab(tabs, isl["id"], isl["name"])
-	_add_tab(tabs, "gacha", "Gacha ★")
+	for h in ResidentDB.HABITATS:
+		_add_tab(tabs, h, ResidentDB.HABITAT_NAMES[h])
+	_add_tab(tabs, "animals", "Animaux")
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 18)
@@ -85,9 +85,9 @@ func _add_tab(parent: Control, id: String, text: String) -> void:
 
 
 func open() -> void:
-	var total := CreatureDB.ALL.size()
-	_count.text = "Amis rencontrés : %d / %d" % [Game.friend_count(), total]
-	_select_tab(Game.current_island)
+	_count.text = "Habitants : %d / %d   ·   Animaux : %d / %d" % [Game.resident_count(), ResidentDB.ALL.size(), Game.species_seen.size(), Fauna.SPECIES.size()]
+	var best := Vitality.best_habitat(Game.current_island)
+	_select_tab(best if best != "" else _tab)
 
 
 func _select_tab(id: String) -> void:
@@ -96,7 +96,12 @@ func _select_tab(id: String) -> void:
 		(_tab_buttons[k] as Button).button_pressed = (k == id)
 	for c in _grid.get_children():
 		c.queue_free()
-	var list: Array[Dictionary] = CreatureDB.gacha_all() if id == "gacha" else CreatureDB.island_creatures(id)
+	if id == "animals":
+		for sp in Fauna.SPECIES:
+			_grid.add_child(_animal_card(sp))
+		_show_animal(Fauna.SPECIES.keys()[0])
+		return
+	var list: Array[Dictionary] = ResidentDB.habitat_residents(id)
 	for c in list:
 		_grid.add_child(_make_card(c))
 	if not list.is_empty():
@@ -104,7 +109,7 @@ func _select_tab(id: String) -> void:
 
 
 func _make_card(c: Dictionary) -> Button:
-	var known := Game.friends.has(c["id"])
+	var known := Game.residents.has(c["id"])
 	var b := UIStyle.button("", 15)
 	b.custom_minimum_size = Vector2(124, 124)
 	var vb := VBoxContainer.new()
@@ -117,7 +122,8 @@ func _make_card(c: Dictionary) -> Button:
 	swatch.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var look: Dictionary = c["look"]
-	var col: Color = look["body"] if known else Color("cfc4b4")
+	var hab_colors := {"forest": Color("6cbf4a"), "garden": Color("f07fb0"), "marine": Color("6aa8f2"), "mountain": Color("a7adb5"), "village": Color("f29a45")}
+	var col: Color = look.get("body", hab_colors.get(c.get("habitat", ""), UIStyle.BORDER)) if known else Color("cfc4b4")
 	swatch.add_theme_stylebox_override("panel", UIStyle.box(col, 28, col.darkened(0.2) if known else Color("b8aa98"), 3, 4))
 	vb.add_child(swatch)
 	var q := UIStyle.label("" if known else "?", 26, Color("8a7563"))
@@ -129,35 +135,68 @@ func _make_card(c: Dictionary) -> Button:
 	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	n.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(n)
-	if c["island"] == "":
-		var r: int = c.get("rarity", 0)
-		var stars := UIStyle.label("★".repeat(r + 1), 14, CreatureDB.RARITY_COLORS[r])
-		stars.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		stars.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(stars)
 	b.pressed.connect(func(): _show_detail(c))
 	return b
 
 
 func _show_detail(c: Dictionary) -> void:
-	var known := Game.friends.has(c["id"])
+	var known := Game.residents.has(c["id"])
 	_preview.set_creature(c["look"], not known)
 	_name.text = c["name"] if known else "???"
-	if c["island"] == "":
-		var r: int = c.get("rarity", 0)
-		_info.text = "Gacha · %s %s" % [CreatureDB.RARITY_NAMES[r], "★".repeat(r + 1)]
-		_req.text = "" if known else "Obtenable à la Machine Gacha (G)."
+	if true:
+		var hab: String = ResidentDB.HABITAT_NAMES[c["habitat"]]
+		_info.text = "Habitat : %s" % hab
+		var where := ""
+		var b: Array = c.get("biomes", [])
+		if not b.is_empty():
+			var names := []
+			for iid in b:
+				names.append(IslandDB.get_island(iid)["name"])
+			where = "\nNe vit que sur : " + ", ".join(names) + "."
+		_req.text = "✔ S'est installé sur l'île." if known else "Peut venir quand l'environnement « %s » est développé et que l'île est assez accueillante.%s" % [hab, where]
 		_bar.visible = false
-	else:
-		_info.text = IslandDB.get_island(c["island"])["name"]
-		var have := Game.get_stat(c["island"], c["stat"])
-		var need: int = c["amount"]
-		_req.text = ("✔ " if known else "Pour l'attirer : ") + "%s  (%d/%d)" % [c["req"], mini(have, need), need]
-		_bar.visible = true
-		_bar.max_value = need
-		_bar.value = mini(have, need)
 	if known:
-		var home: String = (Game.friends[c["id"]] as Dictionary).get("island", "")
+		var home: String = (Game.residents[c["id"]] as Dictionary).get("island", "")
 		_desc.text = c["desc"] + ("\nVit sur : " + IslandDB.get_island(home)["name"] if home != "" else "")
 	else:
 		_desc.text = "Tu n'as pas encore rencontré cette créature."
+
+
+func _animal_card(sp: String) -> Button:
+	var known := Game.species_seen.has(sp)
+	var b := UIStyle.button("", 15)
+	b.custom_minimum_size = Vector2(124, 124)
+	var vb := VBoxContainer.new()
+	vb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	b.add_child(vb)
+	var q := UIStyle.title("" if known else "?", 26)
+	q.add_theme_color_override("font_color", Color("8a7563"))
+	if known:
+		var tr := TextureRect.new()
+		tr.texture = Thumbs.of("pet_" + sp)
+		tr.custom_minimum_size = Vector2(70, 64)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(tr)
+	else:
+		vb.add_child(q)
+	var n := UIStyle.label(Fauna.name_of(sp) if known else "???", 15)
+	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(n)
+	b.pressed.connect(func(): _show_animal(sp))
+	return b
+
+
+func _show_animal(sp: String) -> void:
+	var known := Game.species_seen.has(sp)
+	var d: Dictionary = Fauna.SPECIES[sp]
+	_preview.clear()
+	_name.text = Fauna.name_of(sp) if known else "???"
+	_info.text = "Habitat : %s" % ResidentDB.HABITAT_NAMES[d["habitat"]]
+	_desc.text = "Il vit sur l'île." if known else "Pas encore aperçu."
+	_req.text = "" if known else "Apparaît quand l'environnement « %s » se développe." % ResidentDB.HABITAT_NAMES[d["habitat"]]
+	_bar.visible = false

@@ -7,7 +7,7 @@ var main: Node
 
 func _ready() -> void:
 	Game.reset_game()
-	Game.tutorial_step = 9
+	Game.tutorial_step = 10
 	main = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
 	await _wait(60)
@@ -15,7 +15,7 @@ func _ready() -> void:
 	await main._start_game(false)
 	var w: VoxelWorld = main.world
 	# 1. Derrière un arbre : la caméra doit voir le joueur à travers.
-	var trunk := _find(w, Blocks.WOOD, 6)
+	var trunk := Vector3i(IslandGenerator.props[0]["pos"])
 	main.player.teleport(Vector3(trunk.x + 2.5, trunk.y, trunk.z + 0.5))
 	main.rig.yaw = -PI / 2.0
 	main.rig.pitch = -0.45

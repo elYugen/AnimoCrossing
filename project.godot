@@ -11,8 +11,8 @@ config_version=5
 [application]
 
 config/name="Animo"
-run/main_scene="res://scenes/main.tscn"
 config/description="Cozy game voxel : façonne des îles et attire des créatures."
+run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -20,14 +20,22 @@ config/icon="res://icon.svg"
 
 Game="*res://scripts/core/game.gd"
 Audio="*res://scripts/core/audio.gd"
+DialogueManager="*res://addons/dialogue_manager/dialogue_manager.gd"
 
 [display]
 
 window/size/viewport_width=1600
 window/size/viewport_height=900
-
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/Color grading/plugin.cfg", "res://addons/dialogue_manager/plugin.cfg")
+
+[internationalization]
+
+locale/translations_pot_files=PackedStringArray("res://dialogue/intro.dialogue", "res://dialogue/story.dialogue", "res://dialogue/arrivals.dialogue", "res://dialogue/residents.dialogue")
 
 [physics]
 

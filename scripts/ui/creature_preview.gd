@@ -41,13 +41,26 @@ func set_creature(look: Dictionary, silhouette := false) -> void:
 	for c in _holder.get_children():
 		c.queue_free()
 	_silhouette = silhouette
-	var m := VoxelModel.build(look)
-	if silhouette:
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color("6e5f52")
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.material_override = mat
-	_holder.add_child(m)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color("6e5f52")
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	if look.has("skin"):
+		# Habitant humain : même modèle que le joueur.
+		var h := Player.build_model(look["skin"], look.get("head", ""))
+		_holder.add_child(h)
+		h.scale *= 0.85
+		var ap := h.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		if ap and ap.has_animation("idle"):
+			ap.get_animation("idle").loop_mode = Animation.LOOP_LINEAR
+			ap.play("idle")
+		if silhouette:
+			for mi in h.find_children("*", "MeshInstance3D", true, false):
+				(mi as MeshInstance3D).material_override = mat
+	else:
+		var m := VoxelModel.build(look)
+		if silhouette:
+			m.material_override = mat
+		_holder.add_child(m)
 	_holder.rotation.y = 0.5
 
 

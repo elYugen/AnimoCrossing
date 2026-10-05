@@ -5,7 +5,7 @@ extends CanvasLayer
 
 signal play_requested(new_game: bool)
 
-const CREDITS := "Personnages voxel : Kenney — Blocky Characters (CC0)\nBruitages : Kenney — Impact, Interface, RPG, Casino, Jingles (CC0)\n\nMusiques (OpenGameArt, CC0) :\n« Hush Hamlet » — Zane Little Music\n« Bossa Town » — KarateStudios\n« Snow Theme » — CleytonKauffman\n« Apple Cider » — Zane Little Music"
+const CREDITS := "Personnages voxel : Kenney — Blocky Characters (CC0)\nModèles 3D et ciel : Kenney — Survival, Pirate, Fantasy Town, Holiday, Nature, Furniture Kits, City Kit Suburban, Cube Pets, Skyboxes (CC0)\nBruitages : Kenney — Impact, Interface, RPG, Casino, Jingles (CC0)\n\nMusiques (OpenGameArt, CC0) :\n« Hush Hamlet » — Zane Little Music\n« Bossa Town » — KarateStudios\n« Snow Theme » — CleytonKauffman\n« Apple Cider » — Zane Little Music\n\nDialogues : Dialogue Manager — Nathan Hoad (MIT)\nÉtalonnage : Godot Color Grading — Rytelier (MIT)"
 
 var main: Node
 
@@ -173,13 +173,13 @@ func _slider(text: String, value: float, on_change: Callable) -> HBoxContainer:
 
 func _change_skin(step: int) -> void:
 	Game.player_skin = Player.next_skin(Game.player_skin, step)
-	main.player.set_skin(Game.player_skin)
+	main.player.set_skin(Game.player_skin, Game.player_head)
 	Game.save_game()
 	_refresh_options()
 
 
 func _refresh_options() -> void:
-	_skin_label.text = "Apparence : %s" % Game.player_skin.to_upper()
+	_skin_label.text = "Tenue : %s" % Game.player_skin.to_upper()
 	_admin_button.text = "Mode admin : %s" % ("ACTIVÉ" if Game.admin else "désactivé")
 
 
