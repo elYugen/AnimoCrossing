@@ -163,6 +163,24 @@ Les pages sont jaunies... quelqu'un a vécu ici, seul, il y a très longtemps.
 
 ~ mystere_fin
 J'ai encore pensé à ce carnet, cette nuit.
-Je me demande ce qui est arrivé à cette personne...
-Peut-être que l'île garde encore quelques secrets.
+Alors... quelqu'un était ici avant moi.
+=> END
+
+# --- Le cerf des brumes : la première fois, on ne sait pas ce qu'on a vu.
+
+~ cerf_apercu
+...Qu'est-ce que c'était ?
+Une silhouette pâle, entre les arbres... et puis plus rien.
+=> END
+
+# --- Le point d'eau, plus tard : l'île respire (IslandLife).
+
+~ eau_claire
+L'eau est plus claire qu'avant...
+On dirait que toute l'île respire mieux.
+=> END
+
+~ premiers_fruits
+Oh ! Mes arbres donnent leurs premiers fruits.
+Ils ont bien grandi depuis que je les ai plantés.
 => END

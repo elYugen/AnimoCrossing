@@ -58,6 +58,8 @@ func _ready() -> void:
 	await main.story.open_chest()
 	_check(Game.has_flag("chest") and main.camp_props.opened, "coffre ouvert")
 	_check(Game.tutorial_step == 3 and hud.power_unlocked(0) and hud.power_unlocked(1), "outil universel obtenu")
+	await _wait(3)
+	_check(Game.has_flag("tip_faconneur") and (hud._tip.visible or not hud._tip_queue.is_empty()), "astuce : le Façonneur (%s)" % hud._tip_title.text)
 	await _wait(5)
 	auto_close = false
 
@@ -280,6 +282,8 @@ func _ready() -> void:
 	await main.days.sleep()
 	_check(Game.day == 3 and Vitality.residents("prairie") == residents_before + 1, "nuit 2 : un habitant arrive")
 	_check(Game.tutorial_step == 9, "étape vitalité passée")
+	await get_tree().create_timer(2.0).timeout
+	_check(Game.memories.has("sunrise") and Game.memories.has("resident"), "souvenirs : premier lever de soleil, premier habitant (%s)" % str(Game.memories.keys()))
 	# Beau temps pour la suite (sous la pluie, chacun rentre chez soi).
 	Game.weather = "clear"
 	Game.weather_left = 999.0
@@ -387,6 +391,44 @@ func _ready() -> void:
 			regrown = true
 			break
 	_check(regrown, "les ressources ramassées repoussent")
+	# Le point d'eau suit la vie de l'île.
+	main.life.set_process(false)  # (on choisit le palier nous-mêmes)
+	main.life.tier = 0
+	main.life._update_pond()
+	await get_tree().create_timer(4.2).timeout
+	var murky: Color = (main.life._pond_water.material_override as StandardMaterial3D).albedo_color
+	main.life.tier = 3
+	main.life._update_pond()
+	var lilies: int = main.life._pond.get_child_count() - 1
+	_check(main.life._pond != null and lilies >= 4, "point d'eau vivant : nénuphars et libellules (%d)" % lilies)
+	await get_tree().create_timer(4.2).timeout
+	var clear: Color = (main.life._pond_water.material_override as StandardMaterial3D).albedo_color
+	_check(clear.b > murky.b + 0.2, "l'eau s'éclaircit avec la vie de l'île (%s → %s)" % [murky, clear])
+	main.life.set_process(true)
+	# Les arbres plantés : adultes au 3e jour (remarqués), fruits ensuite.
+	var trees_list: Array = Game.props_added.get_or_add("prairie", [])
+	var base_x := float(sp.x + 8)
+	var base_z := float(sp.y - 10)
+	trees_list.append({"kind": "town_tree", "x": base_x, "y": 0.0, "z": base_z, "rot": 0.0, "scale": 1.0, "key": "p:test:old", "planted": Game.day - 6})
+	trees_list.append({"kind": "town_tree", "x": base_x + 6, "y": 0.0, "z": base_z, "rot": 0.0, "scale": 1.0, "key": "p:test:new", "planted": Game.day - 3})
+	var fruit_found := false
+	for attempt in 8:
+		main.days._tree_life(RandomNumberGenerator.new())
+		for n in main.gathering.get_children():
+			if n is Pickup and n.kind == "fruit" and Vector2(n.position.x - base_x, n.position.z - base_z).length() < 3.0:
+				fruit_found = true
+		if fruit_found:
+			break
+	_check(fruit_found, "un arbre planté adulte donne des fruits")
+	_check(int(Game.flags.get("tree_grown_day", -1)) == Game.day, "un arbre devient adulte aujourd'hui")
+	var grown_line: String = await main.talk.line("arbre_grandi")
+	_check(grown_line.contains("arbre"), "remarque d'habitant : « %s »" % grown_line)
+	main.props.add_persistent("fountain", Vector3(base_x, 0, base_z + 12))
+	var has_fountain := false
+	for pl in main.npc_ai.places():
+		if pl["tag"] == "fountain":
+			has_fountain = true
+	_check(has_fountain, "les habitants peuvent aller boire à la fontaine")
 	_check(is_equal_approx(Props.growth({"planted": Game.day}), 0.3) and is_equal_approx(Props.growth({"planted": Game.day - 5}), 1.0), "une pousse devient un arbre en quelques jours")
 
 	# Constructions : une maison se débloque avec les habitants, se pose et s'ouvre.
@@ -415,6 +457,7 @@ func _ready() -> void:
 			break
 	_check(house_ok, "plan de la maison posé")
 	_check(main.worksites.all().size() == 1, "chantier ouvert")
+	_check(Game.has_flag("tip_chantier"), "astuce : le premier chantier")
 	var site: Dictionary = main.worksites.all()[0]
 	# (l'habitant à qui on vient de parler finit d'abord la conversation)
 	var assigned := 0
@@ -711,7 +754,13 @@ func _ready() -> void:
 	Game.weather = "clear"
 	await _wait(2)
 	_check(main.wildlife.visible, "le beau temps revient : les animaux aussi")
-	# Le cerf des brumes : dans les bois, un jour de brouillard.
+	# Le cerf des brumes : la première fois, une simple pensée...
+	auto_close = true
+	wfx.deer_seen()
+	_check(Game.has_flag("deer_glimpse") and not Game.species_seen.has("spirit_deer"), "cerf aperçu : pas encore dans le carnet")
+	await _wait(5)
+	auto_close = false
+	# ... la deuxième, dans les bois, un jour de brouillard.
 	Game.weather = "fog"
 	var wood := Vector3.ZERO
 	for id in main.props.items:
@@ -760,6 +809,8 @@ func _ready() -> void:
 	_check(repaired and Game.is_island_unlocked("corail"), "barque réparée : Corail découverte")
 	_check(Expeditions.next_for("g:boat").get("id", "") == "hull" and Expeditions.next_for("g:obelisk").is_empty(), "ensuite : la coque, puis le phare")
 	_check(not Game.is_island_unlocked("givree"), "Givrée pas encore découverte")
+	var hint_lines: Array = await main.talk.all_lines(main.talk._island_hint())
+	_check(main.talk._island_hint() == "conseil_coque" and " ".join(hint_lines).contains("coque"), "un habitant parle de renforcer la coque")
 	hud.toggle_panel("map")
 	await _wait(2)
 	_check(hud._open_panel is MapPanel and (hud._map.find_child("Sub", true, false) as Label).text.contains("%d habitants" % Game.resident_count()), "carte de l'archipel")

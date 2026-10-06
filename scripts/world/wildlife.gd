@@ -41,6 +41,7 @@ func spawn(announce: bool) -> void:
 		if not had_butterflies and not butterfly_spots.is_empty() and not Game.has_flag("butterflies_" + Game.current_island):
 			Game.set_flag("butterflies_" + Game.current_island)
 			main.hud.show_item_popup("Des papillons sont arrivés !", "Ils volent au-dessus de tes fleurs.", false)
+			main.get_tree().create_timer(3.0).timeout.connect(func(): main.memories.record("butterflies"))
 
 
 ## L'animal le plus proche de `pos` (null si aucun à moins de `max_d`).

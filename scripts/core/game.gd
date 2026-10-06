@@ -24,6 +24,8 @@ var species_seen := {}
 ## Collections du carnet : {"flowers": {id: true}, "trees": {...},
 ## "furniture": {...}, "islands": {...}}.
 var collections := {}
+## Souvenirs du carnet : id -> {"day", "island", "img"} (voir Memories).
+var memories := {}
 ## Blocs possédés (id en texte -> quantité) : on ne pose que ce qu'on a cassé ou fabriqué.
 var blocks := {}
 ## Recettes déjà annoncées au joueur.
@@ -284,6 +286,7 @@ func save_game() -> void:
 		"structures": structures,
 		"species_seen": species_seen,
 		"collections": collections,
+		"memories": memories,
 		"blocks": blocks,
 		"recipes_seen": recipes_seen,
 		"flags": flags,
@@ -330,6 +333,7 @@ func load_game() -> void:
 	structures = parsed.get("structures", {})
 	species_seen = parsed.get("species_seen", {})
 	collections = parsed.get("collections", {})
+	memories = parsed.get("memories", {})
 	blocks = parsed.get("blocks", {})
 	recipes_seen = parsed.get("recipes_seen", {})
 	flags = parsed.get("flags", {})
@@ -423,6 +427,7 @@ func reset_game() -> void:
 	structures = {}
 	species_seen = {}
 	collections = {}
+	memories = {}
 	blocks = {}
 	recipes_seen = {}
 	flags = {}

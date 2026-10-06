@@ -180,9 +180,11 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 
 	# Ruines de maisons.
 	var ruins := _place_ruins(world, heights, biome, rng, 18)
+	# Petits lieux à découvrir (clairières, puits, cairns, statues...).
+	ruins.append_array(_place_landmarks(world, heights, biome, rng, ruins))
 
 	# Rochers.
-	for i in 240:
+	for i in 340:
 		var x := rng.randi_range(6, VoxelWorld.SX - 7)
 		var z := rng.randi_range(6, VoxelWorld.SZ - 7)
 		var y := world.top_solid_y(x, z)
@@ -198,12 +200,12 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 		world.set_raw(x, y + 2, z, rock)
 
 	# Arbres (modèles 3D) et petite végétation.
-	var tree_count := {"prairie": 520, "plage": 340, "givre": 580, "braise": 540}
+	var tree_count := {"prairie": 680, "plage": 460, "givre": 720, "braise": 700}
 	var kinds: Array = Props.TREES[biome]
 	var taken := {}  # cellules 3x3 occupées (espacement)
 	var placed := 0
 	var attempts := 0
-	while placed < int(tree_count[biome]) and attempts < 30000:
+	while placed < int(tree_count[biome]) and attempts < 40000:
 		attempts += 1
 		var x := rng.randi_range(4, VoxelWorld.SX - 5)
 		var z := rng.randi_range(4, VoxelWorld.SZ - 5)
@@ -235,7 +237,10 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 	var small := {"prairie": ["bush", "bush_large", "mushroom", "log", "stump"], "plage": ["bush", "bush_large"],
 		"givre": ["log", "stump"], "braise": ["bush", "mushroom", "log", "stump"]}
 	var smalls: Array = small[biome]
-	for i in 210:
+	var small_placed := 0
+	var small_tries := 0
+	while small_placed < 280 and small_tries < 8000:
+		small_tries += 1
 		var x := rng.randi_range(6, VoxelWorld.SX - 7)
 		var z := rng.randi_range(6, VoxelWorld.SZ - 7)
 		var y := world.top_solid_y(x, z)
@@ -244,11 +249,13 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 		if not world.get_block(x, y, z) in [Blocks.GRASS, Blocks.SAND, Blocks.SNOW, Blocks.DIRT]:
 			continue
 		_prop(smalls[rng.randi() % smalls.size()], Vector3(x + 0.5, y + 1, z + 0.5), rng.randf() * TAU, rng.randf_range(0.8, 1.2), "g:s:%d,%d" % [x, z])
+		taken[Vector2i(x / 3, z / 3)] = Vector2i(x, z)
+		small_placed += 1
 
 	# Fleurs et herbes hautes.
 	var flowers: Array = FLOWER_SETS[biome]
-	var flower_chance := {"prairie": 0.06, "plage": 0.025, "givre": 0.0, "braise": 0.035}
-	var grass_chance := {"prairie": 0.09, "plage": 0.05, "givre": 0.0, "braise": 0.07}
+	var flower_chance := {"prairie": 0.075, "plage": 0.03, "givre": 0.0, "braise": 0.045}
+	var grass_chance := {"prairie": 0.11, "plage": 0.06, "givre": 0.0, "braise": 0.08}
 	for z in VoxelWorld.SZ:
 		for x in VoxelWorld.SX:
 			var y := heights[x + z * VoxelWorld.SX]
@@ -268,6 +275,113 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 
 	var spawn_y := world.top_solid_y(SPAWN.x, SPAWN.y) + 1
 	return Vector3(SPAWN.x + 0.5, spawn_y + 0.1, SPAWN.y + 0.5)
+
+
+## Petits lieux à découvrir, posés sur un terrain plat, loin du campement
+## et les uns des autres. Renvoie leurs emprises (les arbres les évitent).
+static func _place_landmarks(world: VoxelWorld, heights: PackedInt32Array, biome: String, rng: RandomNumberGenerator, avoid: Array[Rect2i]) -> Array[Rect2i]:
+	var kinds := ["meadow", "well", "cairn", "statue", "mushrooms", "rocks", "fishing"]
+	if biome == "givre":
+		kinds = ["well", "cairn", "statue", "rocks", "fishing"]
+	var rects: Array[Rect2i] = []
+	var spots: Array[Vector2i] = []
+	var flowers: Array = FLOWER_SETS[biome]
+	var attempts := 0
+	while rects.size() < 22 and attempts < 9000:
+		attempts += 1
+		var kind: String = kinds[rects.size() % kinds.size()]
+		var c := Vector2i(rng.randi_range(12, VoxelWorld.SX - 13), rng.randi_range(12, VoxelWorld.SZ - 13))
+		if _near_spawn(c.x, c.y, CLEARING + 14.0) or _near_beach(c.x, c.y, 18.0):
+			continue
+		var far := true
+		for s in spots:
+			if s.distance_to(c) < 26.0:
+				far = false
+				break
+		if not far:
+			continue
+		var rect := Rect2i(c - Vector2i(4, 4), Vector2i(9, 9))
+		var clash := false
+		for r in avoid:
+			if r.grow(3).intersects(rect):
+				clash = true
+				break
+		if clash:
+			continue
+		# Terrain plat ; le campement de pêcheur, lui, veut la côte.
+		var lo := 999
+		var hi := -999
+		for z in range(rect.position.y, rect.end.y):
+			for x in range(rect.position.x, rect.end.x):
+				var h := heights[x + z * VoxelWorld.SX]
+				lo = mini(lo, h)
+				hi = maxi(hi, h)
+		# (les lieux bâtis veulent un sol plat ; les lieux naturels, un peu moins)
+		if hi - lo > (2 if kind in ["meadow", "rocks", "mushrooms"] else 1):
+			continue
+		if kind == "fishing" and not (lo >= SEA and hi <= SEA + 2):
+			continue
+		if kind != "fishing" and lo <= SEA + 1:
+			continue
+		var g := heights[c.x + c.y * VoxelWorld.SX]
+		var at := func(dx: float, dz: float) -> Vector3: return Vector3(c.x + 0.5 + dx, g + 1, c.y + 0.5 + dz)
+		var key := "g:l:%d,%d" % [c.x, c.y]
+		match kind:
+			"meadow":  # clairière fleurie autour d'une vieille souche
+				for dz in range(-4, 5):
+					for dx in range(-4, 5):
+						if dx * dx + dz * dz <= 16 and rng.randf() < 0.55 and not flowers.is_empty():
+							var y := heights[(c.x + dx) + (c.y + dz) * VoxelWorld.SX]
+							if world.get_block(c.x + dx, y, c.y + dz) == Blocks.GRASS:
+								world.set_raw(c.x + dx, y + 1, c.y + dz, flowers[rng.randi() % flowers.size()])
+				world.set_raw(c.x, g + 1, c.y, Blocks.AIR)
+				_prop("stump", at.call(0, 0), rng.randf() * TAU, 1.1, key + ":stump")
+				_prop("bush_large", at.call(3.5, -2.5), rng.randf() * TAU, 1.0, key + ":b1")
+				_prop("bush", at.call(-3.0, 3.0), rng.randf() * TAU, 1.0, key + ":b2")
+			"well":  # vieux puits de pierre
+				var stone := Blocks.MOSS if biome != "braise" else Blocks.BASALT
+				for dz in range(-1, 2):
+					for dx in range(-1, 2):
+						if dx == 0 and dz == 0:
+							for y in range(g - 2, g + 2):
+								world.set_raw(c.x, y, c.y, Blocks.AIR)
+						else:
+							world.set_raw(c.x + dx, g + 1, c.y + dz, stone)
+				_prop("barrel_old", at.call(1.0, 1.0) + Vector3(0, 1, 0), 0.3, 0.55, key + ":bucket")  # sur la margelle
+				_prop("signpost", at.call(-2.2, 1.8), 0.8, 1.0, key + ":sign")
+			"cairn":  # pierres empilées
+				var rock := Blocks.STONE if biome != "braise" else Blocks.BASALT
+				for y in range(g + 1, g + 4):
+					world.set_raw(c.x, y, c.y, rock)
+				world.set_raw(c.x + 1, g + 1, c.y, rock)
+				world.set_raw(c.x, g + 1, c.y + 1, rock)
+			"statue":  # statue oubliée et colonne brisée
+				_prop("statue_head", at.call(0, 0), rng.randf() * TAU, 0.9, key + ":head")
+				_prop("column_broken", at.call(3.0, 2.0), rng.randf() * TAU, 0.8, key + ":col")
+				for i in 6:
+					var a := TAU * i / 6.0
+					var fx := c.x + roundi(cos(a) * 3.0)
+					var fz := c.y + roundi(sin(a) * 3.0)
+					var fy := heights[fx + fz * VoxelWorld.SX]
+					if world.get_block(fx, fy, fz) == Blocks.GRASS and not flowers.is_empty():
+						world.set_raw(fx, fy + 1, fz, flowers[rng.randi() % flowers.size()])
+			"mushrooms":  # cercle de champignons
+				for i in 7:
+					var a := TAU * i / 7.0
+					_prop("mushroom", at.call(cos(a) * 2.6, sin(a) * 2.6), rng.randf() * TAU, rng.randf_range(0.9, 1.4), key + ":m%d" % i)
+				_prop("log", at.call(0.0, 0.0), rng.randf() * TAU, 1.0, key + ":log")
+			"rocks":  # amas de rochers
+				for i in 3:
+					var a := TAU * i / 3.0 + rng.randf()
+					_prop("rock_large", at.call(cos(a) * 2.2, sin(a) * 2.2), rng.randf() * TAU, rng.randf_range(0.7, 1.0), key + ":r%d" % i)
+			"fishing":  # campement de pêcheur abandonné, sur la côte
+				_prop("crate", at.call(-1.5, 0.0), 0.4, 1.0, key + ":crate")
+				_prop("barrel", at.call(1.5, -0.6), 0.0, 1.0, key + ":barrel")
+				_prop("campfire_old", at.call(0.0, 2.2), 0.0, 1.0, key + ":fire")
+				_prop("log", at.call(1.8, 2.6), 1.3, 1.0, key + ":log")
+		rects.append(rect)
+		spots.append(c)
+	return rects
 
 
 ## Petites ruines de maisons : murs effondrés, sol, poutres et débris.

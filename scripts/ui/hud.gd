@@ -66,6 +66,12 @@ var _disc_desc: Label
 var _disc_use: Label
 var _disc_queue: Array[String] = []
 var _disc_timer := 0.0
+## Astuces (mini-tutos) : fiche à droite de l'écran, une à la fois.
+var _tip: PanelContainer
+var _tip_title: Label
+var _tip_text: Label
+var _tip_queue: Array = []
+var _tip_timer := 0.0
 var _item_title: Label
 var _item_sub: Label
 var _item_timer := 0.0
@@ -127,6 +133,7 @@ func _ready() -> void:
 	_build_popup()
 	_build_item_popup()
 	_build_discovery()
+	_build_tip()
 	_build_pause()
 	_fade = ColorRect.new()
 	_fade.color = Color("fff8ec")
@@ -467,6 +474,66 @@ func _build_discovery() -> void:
 	_disc_use.custom_minimum_size.x = 380
 	vb.add_child(_disc_use)
 	Game.first_obtained.connect(func(key: String): _disc_queue.append(key))
+
+
+func _build_tip() -> void:
+	var mc := _anchored(Control.PRESET_CENTER_RIGHT, Vector2(20, 0))
+	mc.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	mc.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_tip = PanelContainer.new()
+	_tip.add_theme_stylebox_override("panel", UIStyle.frame(22, 18))
+	_tip.custom_minimum_size = Vector2(430, 0)
+	_tip.visible = false
+	_tip.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed:
+			_tip_timer = 0.0)
+	mc.add_child(_tip)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 6)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tip.add_child(vb)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(head)
+	head.add_child(UIStyle.tag("ASTUCE", UIStyle.STAR.darkened(0.25), 13))
+	_tip_title = UIStyle.label("", 23, UIStyle.FRAME)
+	_tip_title.add_theme_font_override("font", UIStyle.title_font())
+	head.add_child(_tip_title)
+	_tip_text = UIStyle.label("", 16)
+	_tip_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_tip_text.custom_minimum_size.x = 390
+	vb.add_child(_tip_text)
+
+
+## Une astuce à afficher dès que possible (voir Tips).
+func queue_tip(title: String, lines: Array) -> void:
+	_tip_queue.append([title, lines])
+
+
+func _update_tip(delta: float) -> void:
+	if _tip.visible:
+		_tip_timer -= delta
+		if _tip_timer <= 0.0:
+			_tip.modulate.a -= delta * 3.0
+			if _tip.modulate.a <= 0.0:
+				_tip.visible = false
+		return
+	if _tip_queue.is_empty() or not visible or main == null or main.in_title or main.cinematic:
+		return
+	var t: Array = _tip_queue.pop_front()
+	_tip_title.text = t[0]
+	var lines := ""
+	for l in t[1]:
+		lines += ("
+" if lines != "" else "") + "•  " + str(l)
+	_tip_text.text = lines
+	_tip.visible = true
+	_tip.modulate.a = 0.0
+	create_tween().tween_property(_tip, "modulate:a", 1.0, 0.3)
+	# Le temps de lire : au moins 9 s, plus pour les longues astuces.
+	_tip_timer = clampf(lines.length() / 16.0, 9.0, 18.0)
+	Audio.play("book", -8.0)
 
 
 func _show_discovery(key: String) -> void:
@@ -1111,6 +1178,8 @@ func _on_crafted(r: Dictionary) -> void:
 
 
 func open_crafting(at_table: bool) -> void:
+	if at_table and main:
+		main.tips.tip("artisan")
 	_craft_at_table = at_table
 	if _open_panel and _open_panel.name == "craft":
 		close_panel()
@@ -1241,6 +1310,7 @@ func _process(delta: float) -> void:
 	if main and main.sky and _clock:
 		_clock.text = main.sky.clock_text()
 	_update_discovery(delta)
+	_update_tip(delta)
 	if _item_popup.visible:
 		_item_timer -= delta
 		if _item_timer <= 0.0:

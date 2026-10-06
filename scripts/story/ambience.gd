@@ -3,7 +3,8 @@ extends Node
 ## Ambiance sonore synthétisée en temps réel (aucun fichier audio) :
 ## vagues (bruit brun modulé par la houle), vent (bruit filtré qui siffle),
 ## craquements de bois (frottements excitant des résonateurs), pluie et
-## tonnerre, chants d'oiseaux (glissandos aigus) et grillons la nuit.
+## tonnerre, chants d'oiseaux (glissandos aigus), grillons la nuit,
+## grenouilles près de l'eau et rumeur du village (voix et petits coups).
 ## Les niveaux se règlent avec `fade_to()`.
 
 const RATE := 22050.0
@@ -14,6 +15,21 @@ var creaks := 0.0  # 0 = aucun craquement, 1 = fréquents
 var rain := 0.0  # pluie (bruissement + gouttes)
 var birds := 0.0  # 0 = silence, 1 = l'île chante (suit la vitalité)
 var crickets := 0.0  # grillons, la nuit
+var frogs := 0.0  # grenouilles (près du point d'eau, quand l'île vit)
+var village := 0.0  # rumeur du village (habitants proches)
+# Grenouilles : coassements de 2-3 « ribbit »
+var _fr_left := 0.0
+var _fr_ph := 0.0
+var _fr_f := 200.0
+var _fr_wait := 3.0
+var _fr_n := 0
+# Village : murmure de voix et petits coups de marteau au loin
+var _vl_lp := 0.0
+var _vl_bp := 0.0
+var _vl_syl := 0.0
+var _vl_knock := 0.0
+var _vl_wait := 4.0
+var _vl_ph := 0.0
 # Oiseaux : un chant = quelques notes glissées
 var _bd_left := 0.0  # durée restante de la note (s)
 var _bd_len := 0.1
@@ -152,6 +168,21 @@ func render(n: int, delta: float) -> PackedVector2Array:
 		_bd_notes -= 1
 		_bd_wait = randf_range(0.03, 0.12) if _bd_notes > 0 else randf_range(1.0, 7.0) / maxf(birds, 0.1)
 
+	# Grenouilles : de temps en temps, 2 ou 3 coassements.
+	_fr_wait -= delta
+	if frogs > 0.01 and _fr_left <= 0.0 and _fr_wait <= 0.0:
+		if _fr_n <= 0:
+			_fr_n = randi_range(2, 3)
+			_fr_f = randf_range(150.0, 260.0)
+		_fr_left = 0.16
+		_fr_n -= 1
+		_fr_wait = randf_range(0.12, 0.2) if _fr_n > 0 else randf_range(1.5, 6.0) / maxf(frogs, 0.1)
+	# Village : un petit coup de marteau, de temps en temps.
+	_vl_wait -= delta
+	if village > 0.01 and _vl_wait <= 0.0:
+		_vl_knock = 1.0
+		_vl_wait = randf_range(2.5, 9.0) / maxf(village, 0.2)
+
 	_buf.resize(n)
 	var inv := 1.0 / RATE
 	for i in n:
@@ -215,6 +246,26 @@ func render(n: int, delta: float) -> PackedVector2Array:
 				_cr_ph = fmod(_cr_ph + 4400.0 * inv, 1.0)
 				var pulse := maxf(0.0, sin(TAU * 30.0 * _cr_t))
 				cr = sin(TAU * _cr_ph) * pulse * 0.025 * crickets
-		var mono := wave + wnd + rn + cr
+		# --- Grenouille : note grave hachée 28 fois par seconde.
+		var fr := 0.0
+		if _fr_left > 0.0:
+			var q2 := 1.0 - _fr_left / 0.16
+			_fr_ph = fmod(_fr_ph + _fr_f * (1.0 + 0.3 * q2) * inv, 1.0)
+			var wave_f := 1.0 if _fr_ph < 0.5 else -1.0
+			fr = wave_f * maxf(0.0, sin(TAU * 28.0 * q2 * 0.16)) * sin(PI * q2) * 0.035 * frogs
+			_fr_left -= inv
+		# --- Village : murmure (bruit filtré, rythme de syllabes) + coups secs.
+		var vl := 0.0
+		if village > 0.01:
+			_vl_syl += inv * 4.5
+			var syl := maxf(0.0, sin(TAU * _vl_syl) * sin(TAU * _vl_syl * 0.37))
+			_vl_lp += (white - _vl_lp) * 0.08
+			_vl_bp += (_vl_lp - _vl_bp) * 0.02
+			vl = (_vl_lp - _vl_bp) * syl * 0.5 * village
+			if _vl_knock > 0.001:
+				_vl_ph = fmod(_vl_ph + 520.0 * inv, 1.0)
+				vl += sin(TAU * _vl_ph) * _vl_knock * 0.05 * village
+				_vl_knock *= 0.9985
+		var mono := wave + wnd + rn + cr + fr + vl
 		_buf[i] = Vector2(clampf(mono + ck * (1.0 - _ck_pan) + bd * (1.0 - _bd_pan), -1.0, 1.0), clampf(mono + ck * _ck_pan + bd * _bd_pan, -1.0, 1.0))
 	return _buf

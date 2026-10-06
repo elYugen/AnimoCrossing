@@ -86,6 +86,8 @@ func play_scene(group: Array[Resident], cue: String) -> void:
 	for c in group:
 		_in_scene[c.data["id"]] = true
 		c.stay(lines.size() * LINE_TIME + 2.0)
+	if cue.begins_with("feu_") and main.sky.is_night() == false and Game.time >= 18.0:
+		main.memories.record("fire_evening")
 	for l in lines:
 		var i := maxi(0, "ABC".find(str(l["speaker"])))
 		if i >= group.size() or not is_instance_valid(group[i]) or group[i].activity != "sit":

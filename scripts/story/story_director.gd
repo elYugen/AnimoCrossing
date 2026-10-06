@@ -137,6 +137,7 @@ func open_chest() -> void:
 	await get_tree().create_timer(2.6).timeout
 	await think("outil")
 	main.busy = false
+	main.tips.tip("faconneur")
 
 
 # --- Pensées qui guident (pas de tutoriel) ---------------------------------

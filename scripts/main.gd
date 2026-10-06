@@ -44,6 +44,8 @@ var life: IslandLife
 var expeditions: Expeditions
 var mystery: Mystery
 var weather_fx: WeatherFX
+var tips: Tips
+var memories: Memories
 var aim: ToolAim
 var tools: ToolActions
 
@@ -150,6 +152,10 @@ func _ready() -> void:
 	_add_system(mystery, "Mystery")
 	weather_fx = WeatherFX.new()
 	_add_system(weather_fx, "WeatherFX")
+	tips = Tips.new()
+	_add_system(tips, "Tips")
+	memories = Memories.new()
+	_add_system(memories, "Memories")
 	aim = ToolAim.new()
 	_add_system(aim, "Aim")
 	tools = ToolActions.new()
@@ -330,6 +336,8 @@ func travel_to(id: String) -> void:
 	loading = false
 	hud.toast("Bienvenue sur l'%s !" % IslandDB.get_island(id)["name"], UIStyle.GREEN_DARK)
 	Game.save_game()
+	if id != "prairie":
+		get_tree().create_timer(2.0).timeout.connect(func(): memories.record("crossing"))
 
 
 # --- Boucle --------------------------------------------------------------

@@ -70,6 +70,7 @@ func place_structure() -> bool:
 	if Props.is_site(kind):
 		# Grosse construction : on pose le plan, les habitants viendront bâtir.
 		main.worksites.add_build(kind, pos, aim.place_rot)
+		main.tips.tip("chantier")
 		Audio.play("place", -4.0, 0.05, 0.7)
 		Game.notify_action("place")
 		if Vitality.residents(Game.current_island) == 0:
@@ -248,6 +249,8 @@ func on_site_finished(site: Dictionary) -> void:
 				Moments.add_novelty(props.key_of(id), kind)
 				if Props.is_house(kind):
 					main.houses.auto_home(props.key_of(id), pos)
+					main.tips.tip("maison")
+					main.memories.record("house")
 	else:
 		for key in site["targets"]:
 			for id in props.items.keys():

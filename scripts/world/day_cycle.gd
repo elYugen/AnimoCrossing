@@ -8,6 +8,7 @@ extends Node
 var main: Main
 ## Arrivées de la nuit : présentées par la scène du matin, pas tout de suite.
 var _morning := false
+var _first_fruits_pending := false
 
 
 func _ready() -> void:
@@ -51,6 +52,8 @@ func sleep() -> void:
 	await story.clear_bars(1.6)
 	story.queue_free()
 	main.cinematic = false
+	if Game.day == 2:
+		get_tree().create_timer(0.8).timeout.connect(func(): main.memories.record("sunrise"))
 	main.wildlife.spawn(true)
 	for iid in arrivals:
 		if iid != Game.current_island:
@@ -63,6 +66,9 @@ func sleep() -> void:
 	elif Vitality.next_threshold(Game.current_island) >= 0:
 		await main.story.think("matin_vide")
 	await main.mystery.on_morning()
+	if _first_fruits_pending:
+		_first_fruits_pending = false
+		await main.story.think("premiers_fruits")
 	main.busy = false
 
 
@@ -93,6 +99,7 @@ func _welcome(c: Dictionary) -> void:
 		get_tree().create_timer(3.5).timeout.connect(func():
 			hud.toast("Plus l'île est accueillante, plus elle attire d'habitants !", UIStyle.BLUE.darkened(0.2)))
 	Game.notify_action("arrival")
+	get_tree().create_timer(1.5).timeout.connect(func(): main.memories.record("resident"))
 	# Une maison libre ? Il s'y installe ; sinon, il faudra lui en bâtir une.
 	var props := main.props
 	for id in props.items:
@@ -147,3 +154,23 @@ func regrow() -> void:
 				grown += 1
 		world.flush()
 	main.props.update_growth()
+	_tree_life(rng)
+
+
+## Les arbres plantés par le joueur : le jour où l'un devient adulte, on le
+## note (les habitants le remarquent) ; les adultes donnent des fruits.
+func _tree_life(rng: RandomNumberGenerator) -> void:
+	var fruits := 0
+	for e in Game.props_added.get(Game.current_island, []):
+		if not e.has("planted") or not Props.is_tree(str(e["kind"])):
+			continue
+		var age := Game.day - int(e["planted"])
+		if age == 3:
+			Game.flags["tree_grown_day"] = Game.day
+		if age >= 4 and fruits < 12 and rng.randf() < 0.6:
+			var a := rng.randf() * TAU
+			main.gathering.add_extra("fruit", Vector3(float(e["x"]), 0, float(e["z"])) + Vector3(cos(a), 0, sin(a)) * rng.randf_range(1.2, 2.2))
+			fruits += 1
+	if fruits > 0 and not Game.has_flag("first_fruits"):
+		Game.set_flag("first_fruits")
+		_first_fruits_pending = true

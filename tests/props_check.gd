@@ -82,7 +82,19 @@ func _check_island(island: String) -> void:
 			var inter := a.intersection(b)
 			if inter.get_volume() > 0.15 * minf(a.get_volume(), b.get_volume()):
 				report["chevauche"].append("%s ↔ %s" % [ka, kb])
-	print("--- %s : %d objets" % [island, n])
+	var trees := 0
+	var landmarks := {}
+	var smalls := 0
+	for id in props.items:
+		var k2 := props.kind_of(id)
+		var key2 := props.key_of(id)
+		if Props.is_tree(k2):
+			trees += 1
+		if key2.begins_with("g:l:"):
+			landmarks[key2.get_slice(":", 2)] = true
+		if key2.begins_with("g:s:"):
+			smalls += 1
+	print("--- %s : %d objets (%d arbres, %d petits végétaux, %d lieux à découvrir)" % [island, n, trees, smalls, landmarks.size()])
 	for k in report:
 		var list: Array = report[k]
 		problems += list.size()

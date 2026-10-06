@@ -50,5 +50,6 @@ static func population(island_id: String) -> Dictionary:
 		var score := float(scores.get(d["habitat"], 0.0))
 		var need := float(d["need"])
 		if score >= need:
-			out[sp] = clampi(1 + floori((score - need) / (need + 10.0)), 1, 4)
+			# (les îles sont grandes : un peu plus d'animaux par espèce)
+			out[sp] = clampi(2 + floori((score - need) / (need + 8.0)), 2, 6)
 	return out

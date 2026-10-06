@@ -17,6 +17,14 @@ func line(cue: String, repl := {}) -> String:
 	return Moments.fill(out)
 
 
+## Toutes les lignes d'une séquence (pour les remarques en plusieurs phrases).
+func all_lines(cue: String) -> Array:
+	var out := []
+	for t in await Dialogues.texts(Dialogues.RESIDENTS, cue):
+		out.append(Moments.fill(t))
+	return out
+
+
 func talk(c: Resident) -> void:
 	var rng := main.rng
 	var hud := main.hud
@@ -30,7 +38,16 @@ func talk(c: Resident) -> void:
 	var react: String = await furniture_reaction(id)
 	if first_today and main.mystery.resident_doubt():
 		# Le mystère de la plage : une seule fois, un habitant en parle.
-		lines.append(await line("epave_doute"))
+		lines.append_array(await all_lines("epave_doute"))
+	elif first_today and int(Game.flags.get("tree_grown_day", -10)) >= Game.day - 1 			and int(Game.flags.get("tree_remark_day", -10)) < int(Game.flags["tree_grown_day"]):
+		# Un arbre planté par le joueur vient de devenir adulte.
+		Game.flags["tree_remark_day"] = Game.flags["tree_grown_day"]
+		lines.append(await line("arbre_grandi"))
+	elif first_today and _island_hint() != "":
+		# Ce qu'il faudrait pour aller plus loin : une simple remarque.
+		var hint := _island_hint()
+		lines.append_array(await all_lines(hint))
+		Game.set_flag("hint_" + hint)
 	elif d.get("moved", false):
 		d["moved"] = false
 		lines.append(await line("demenage") + " " + Friendship.moved_reason(id))
@@ -69,6 +86,7 @@ func talk(c: Resident) -> void:
 		if h >= 5 and not d.get("best_friend", false):
 			d["best_friend"] = true
 			lines.append(await line("ami"))
+			main.memories.record("friend")
 			get_tree().create_timer(0.5).timeout.connect(func():
 				hud.show_item_popup("%s est devenu un véritable ami" % c.data["name"], "♥ 5/5", false))
 		elif h >= 4 and not d.get("unique_given", false):
@@ -95,6 +113,15 @@ func talk(c: Resident) -> void:
 	hud.show_dialog(who, lines, func(): _offer_menu(c))
 	Audio.play("talk", -4.0, 0.2, c.voice)
 	Game.notify_action("talk")
+
+
+## Une remarque sur la prochaine île à découvrir ("" : rien à dire).
+func _island_hint() -> String:
+	if Game.has_flag("unlock_corail") and not Game.has_flag("unlock_givree") and not Game.has_flag("hint_conseil_coque"):
+		return "conseil_coque"
+	if Game.has_flag("unlock_givree") and not Game.has_flag("unlock_braise") and not Game.has_flag("hint_conseil_phare"):
+		return "conseil_phare"
+	return ""
 
 
 ## Après la discussion : lui demander un coup de main (chantier, nettoyage,

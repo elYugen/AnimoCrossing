@@ -154,7 +154,7 @@ static func progress() -> Dictionary:
 	for isl in IslandDB.ISLANDS:
 		if Game.has_collected("islands", isl["id"]):
 			islands += 1
-	var memories := 0
+	var memories := Game.memories.size()
 	for d in Mystery.DISCOVERIES:
 		if Game.has_flag(d["flag"]):
 			memories += 1
@@ -168,7 +168,7 @@ static func progress() -> Dictionary:
 		"herbarium": [flowers + trees, Blocks.FLOWERS.size() + TREES.size()],
 		"furniture": [furn, Interior.FURNITURE.size()],
 		"islands": [islands, IslandDB.ISLANDS.size()],
-		"memories": [memories, Mystery.DISCOVERIES.size()],
+		"memories": [memories, Mystery.DISCOVERIES.size() + Memories.MOMENTS.size()],
 	}
 
 
@@ -220,10 +220,15 @@ func _select_tab(id: String) -> void:
 				_grid.add_child(_card(isl["name"] if known else "???", null, isl["water_shallow"] if known else Color("cfc4b4"), func(): _show_island(isl)))
 			first = func(): _show_island(IslandDB.ISLANDS[0])
 		"memories":
+			# Les moments vécus (avec leur image), puis les traces du mystère.
+			for mid in Memories.MOMENTS:
+				var known := Game.memories.has(mid)
+				var m: Dictionary = Memories.MOMENTS[mid]
+				_grid.add_child(_card(m["title"] if known else "???", Memories.texture_of(mid) if known else null, Color("e8d8b8") if known else Color("cfc4b4"), func(): _show_moment(mid)))
 			for d in Mystery.DISCOVERIES:
 				var known := Game.has_flag(d["flag"])
 				_grid.add_child(_card(d["title"] if known else "???", null, Color("e8d8b8") if known else Color("cfc4b4"), func(): _show_memory(d)))
-			first = func(): _show_memory(Mystery.DISCOVERIES[0])
+			first = func(): _show_moment(Memories.MOMENTS.keys()[0])
 	first.call()
 
 
@@ -345,6 +350,16 @@ func _show_island(isl: Dictionary) -> void:
 		return
 	_detail(isl["name"], "Habitants : %d   ·   %s" % [Vitality.residents(isl["id"]), Vitality.tier_name(Vitality.percent(isl["id"]))],
 		isl["desc"], "", null, isl["water_shallow"])
+
+
+func _show_moment(id: String) -> void:
+	if not Game.memories.has(id):
+		_detail("???", "Souvenir", "Un moment qui n'est pas encore arrivé.", "")
+		return
+	var m: Dictionary = Memories.MOMENTS[id]
+	var info: Dictionary = Game.memories[id]
+	var where: String = IslandDB.get_island(info.get("island", "prairie"))["name"]
+	_detail(m["title"], "Jour %d · %s" % [int(info.get("day", 1)), where], m["text"], "", Memories.texture_of(id))
 
 
 func _show_memory(d: Dictionary) -> void:

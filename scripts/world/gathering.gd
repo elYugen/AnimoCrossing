@@ -5,7 +5,7 @@ extends Node3D
 
 ## Jours avant qu'une ressource ramassée repousse.
 const REGROW_DAYS := {"branch": 1, "plant": 1, "fruit": 2, "stone": 3}
-const COUNTS := {"branch": 160, "stone": 135, "fruit": 90, "plant": 125}
+const COUNTS := {"branch": 220, "stone": 180, "fruit": 120, "plant": 170}
 
 var main: Main
 
@@ -20,7 +20,7 @@ func spawn() -> void:
 	rng.seed = int(isl["seed"]) + 5
 	for k in COUNTS:
 		var placed := 0
-		for attempt in 7000:
+		for attempt in 9000:
 			if placed >= int(COUNTS[k]):
 				break
 			var x := rng.randi_range(8, VoxelWorld.SX - 9)
@@ -66,6 +66,17 @@ func _add(kind: String, x: int, z: int, near_tree: bool) -> bool:
 	pk.position = p
 	add_child(pk)
 	return true
+
+
+## Un objet en plus, pour la journée (fruits tombés d'un arbre planté...).
+func add_extra(kind: String, pos: Vector3) -> void:
+	var y := main.world.top_solid_y(floori(pos.x), floori(pos.z))
+	if y <= IslandGenerator.SEA:
+		return
+	var pk := Pickup.new()
+	pk.kind = kind
+	pk.position = Vector3(pos.x, y + 1.0, pos.z)
+	add_child(pk)
 
 
 ## Ramassage automatique quand le joueur passe dessus.

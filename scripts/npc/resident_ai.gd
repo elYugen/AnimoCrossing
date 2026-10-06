@@ -17,7 +17,11 @@ const FAVORITE := {"forest": ["nature"], "garden": ["flowers", "garden", "nature
 const PLACE_TAGS := {"campfire": "fire", "campfire_old": "fire", "bench": "bench", "fountain": "plaza",
 	"stall": "plaza", "lantern": "plaza", "garden": "garden", "planter": "garden", "workbench": "work", "cart": "work"}
 ## Ce qu'on fait sur place, selon le lieu.
-const PLACE_ACT := {"bench": "sit", "fire": "sit", "garden": "pickup", "work": "pickup", "plaza": "idle", "flowers": "idle"}
+const PLACE_ACT := {"bench": "sit", "fire": "sit", "garden": "pickup", "work": "pickup", "plaza": "idle", "flowers": "idle",
+	"fountain": "pickup", "house": "idle"}
+## Ce qu'on en dit en arrivant (parfois) : on boit à la fontaine, on admire
+## les fleurs, on regarde les maisons, on s'occupe du potager.
+const USE_CUE := {"fountain": "usage_fontaine", "flowers": "usage_fleurs", "house": "usage_maison", "garden": "usage_potager"}
 ## Où va celui qui aime le temps qu'il fait, et ce qu'il y fait.
 const WEATHER_SPOT := {"rain": ["flowers", "garden", "nature"], "storm": ["beach"], "snow": ["open"], "fog": ["beach", "nature"]}
 
@@ -100,11 +104,20 @@ func tick(delta: float) -> void:
 			wanted = ["plaza", "bench", "fire"]  # midi : on se retrouve
 		elif main.life.tier >= 3 and rng.randf() < 0.4:
 			wanted = ["bench", "plaza", "garden", "flowers"] + wanted  # l'île vit : on profite des installations
+		# De temps en temps : profiter de ce que le joueur a construit.
+		if rng.randf() < 0.22:
+			var uses := ["fountain", "flowers", "house", "garden"]
+			uses.shuffle()
+			wanted = uses + wanted
 		var spot := activity_spot(spots, c, wanted)
 		if spot.is_empty():
 			continue
 		var dur := rng.randf_range(8.0, 20.0)
-		c.go(spot["pos"], spot["act"], dur, spot.get("face", Vector3.INF))
+		var tag: String = spot.get("tag", "")
+		var arrive := Callable()
+		if USE_CUE.has(tag) and rng.randf() < 0.45:
+			arrive = func(): _say_cue(c, USE_CUE[tag], 0.6)
+		c.go(spot["pos"], spot["act"], dur, spot.get("face", Vector3.INF), arrive)
 		# Sur un banc, on aime avoir de la compagnie.
 		if spot.get("tag", "") == "bench" and rng.randf() < 0.6:
 			var mate := _free_neighbor(crs, c, 30.0)
@@ -149,6 +162,10 @@ func places() -> Array:
 		var k := props.kind_of(id)
 		if PLACE_TAGS.has(k):
 			out.append({"pos": props.items[id]["pos"], "tag": PLACE_TAGS[k]})
+		if k == "fountain":
+			out.append({"pos": props.items[id]["pos"], "tag": "fountain"})
+		elif Props.is_house(k) and props.key_of(id).begins_with("p:"):
+			out.append({"pos": props.door_position(id), "tag": "house"})
 		# Abris contre la pluie : étals, tentes posées par le joueur.
 		if k == "stall" or (k == "tent" and props.key_of(id).begins_with("p:")):
 			out.append({"pos": props.items[id]["pos"], "tag": "shelter"})

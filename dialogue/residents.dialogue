@@ -275,3 +275,45 @@ C: Garde-m'en un !
 Tu sais... les vieilles caisses, sur la plage... elles ne viennent pas de ton bateau.
 Elles étaient déjà là bien avant que j'arrive sur l'île.
 => END
+
+# --- Remarques sur la suite du voyage (une fois chacune)
+
+~ conseil_coque
+Tu veux aller vers le nord ? Les eaux y sont glacées...
+Il faudrait renforcer la coque de ta barque si tu veux aller là-bas.
+=> END
+
+~ conseil_phare
+Tu as vu la vieille tour, près des ruines englouties ?
+Pourquoi construire un phare ici... s'il n'y a plus personne ?
+=> END
+
+# --- Les arbres plantés par le joueur
+
+~ arbre_grandi
+% Ton arbre a grandi ! On dirait qu'il a toujours été là.
+% Tu as vu ton arbre ? Il est magnifique maintenant.
+% Les arbres que tu as plantés commencent à faire de l'ombre. Merci !
+=> END
+
+# --- Ils profitent de ce que le joueur a construit (ResidentAI)
+
+~ usage_fontaine
+% Ah, de l'eau bien fraîche !
+% Rien de tel qu'une petite gorgée à la fontaine.
+=> END
+
+~ usage_fleurs
+% Que c'est joli, toutes ces fleurs...
+% Ça sent bon, par ici !
+=> END
+
+~ usage_maison
+% Elle a fière allure, cette maison.
+% Un jour, j'aimerais bien la même.
+=> END
+
+~ usage_potager
+% Ça pousse bien, par ici.
+% Encore un peu d'eau, et ce sera parfait.
+=> END

@@ -184,11 +184,18 @@ func _deer_spot(from: Vector3, dist: float) -> Vector3:
 	return Vector3.INF
 
 
-## Le cerf a été vu jusqu'au bout : il entre dans le carnet.
+## Le cerf a été vu jusqu'au bout. La première fois, on ne sait pas trop ce
+## qu'on a vu ; la deuxième, il entre dans le carnet.
 func deer_seen() -> void:
-	var first := not Game.species_seen.has("spirit_deer")
+	if Game.species_seen.has("spirit_deer"):
+		return
+	if not Game.has_flag("deer_glimpse"):
+		Game.set_flag("deer_glimpse")
+		Game.save_game()
+		main.story.think("cerf_apercu")
+		return
 	Game.species_seen["spirit_deer"] = true
 	Game.save_game()
-	if first:
-		main.hud.show_item_popup("Le cerf des brumes", "Il s'est effacé dans le brouillard... (noté dans ton carnet)", false)
-		Audio.play("jingle_rare", -6.0, 0.0)
+	main.hud.show_item_popup("Nouvelle découverte : le cerf des brumes", "Il ne se montre que dans le brouillard... (noté dans ton carnet)", false)
+	main.memories.record("deer")
+	Audio.play("jingle_rare", -6.0, 0.0)
