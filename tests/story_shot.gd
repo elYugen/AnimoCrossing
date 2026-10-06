@@ -23,7 +23,7 @@ func _ready() -> void:
 	cc._confirm()
 	var t0 := Time.get_ticks_msec()
 	var n := 0
-	while main._cinematic or main._loading:
+	while main.cinematic or main.loading:
 		await _wait(1)
 		var story: StoryOverlay = null
 		for c in main.get_children():

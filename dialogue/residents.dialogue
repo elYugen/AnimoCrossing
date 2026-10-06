@@ -30,10 +30,35 @@
 % Belle journée qui commence !
 => END
 
-~ belle_ile
+# Ce qu'ils pensent de l'île, selon son palier de vie (IslandLife).
+~ ile_1
+% Tu entends ? Il y a des oiseaux, maintenant.
+% L'île commence à se réveiller, on dirait.
+% Hier encore, tout était si silencieux ici.
+=> END
+
+~ ile_2
 % L'île devient vraiment belle, grâce à toi.
-% Je n'en reviens pas de tout ce que tu as fait ici.
+% Tu as vu les papillons sur les fleurs ?
 % Chaque jour, l'île a l'air un peu plus vivante.
+=> END
+
+~ ile_3
+% Je n'en reviens pas de tout ce que tu as fait ici.
+% Il y a de la vie partout, c'est merveilleux.
+% Le matin, les oiseaux me réveillent. J'adore ça.
+=> END
+
+~ ile_4
+% Je crois que je n'ai jamais été aussi bien que sur cette île.
+% Cette île, c'est mon petit paradis.
+% Quand je pense à l'île vide d'avant... quelle chance d'habiter ici.
+=> END
+
+~ ile_5
+% Je ne voudrais vivre nulle part ailleurs.
+% Il ne manque rien ici. Sauf peut-être... non, rien.
+% Merci. Vraiment. Pour tout.
 => END
 
 ~ sans_maison
@@ -89,4 +114,164 @@ Je suis content d'être venu sur cette île.
 ~ meuble
 % Merci pour {f} ! Ma maison est bien plus agréable.
 % Tu as ajouté {f} chez moi ? C'est adorable !
+=> END
+
+~ chantier_ok
+% J'y vais tout de suite !
+% Compte sur moi, je file au chantier.
+% Un coup de main ? Avec plaisir !
+=> END
+
+~ chantier_complet
+Il y a déjà assez de monde là-bas, je vais les gêner.
+=> END
+
+~ repos
+% Ouf, merci ! Je vais souffler un peu.
+% Une petite pause ne fera pas de mal.
+=> END
+
+# --- Météo : ceux qui adorent le temps qu'il fait
+
+~ meteo_rain
+% J'adore cette odeur après la pluie !
+% La pluie, c'est le meilleur moment pour les plantes.
+% Écoute les gouttes sur les feuilles... c'est apaisant.
+=> END
+
+~ meteo_storm
+% Quelles vagues ! Je ne raterais ça pour rien au monde.
+% Un bon orage, ça réveille l'île !
+% Regarde le ciel, il est magnifique quand il gronde.
+=> END
+
+~ meteo_snow
+% De la neige ! On fait un bonhomme ?
+% Tout est blanc, on dirait une autre île.
+% Rien de tel qu'une balade dans la neige fraîche.
+=> END
+
+~ meteo_fog
+% Le brouillard rend l'île mystérieuse, j'adore.
+% On n'y voit pas à trois pas... c'est parfait pour rêver.
+% Dans la brume, on entend la mer sans la voir.
+=> END
+
+# --- Moments : coucous et conversations entre voisins
+# A, B, C : le premier, le deuxième, le troisième habitant présent.
+
+~ coucou
+% Coucou, {joueur} !
+% Oh, salut !
+% Hé ! Bonne journée !
+% Coucou !
+=> END
+
+~ banc_village
+A: Tu crois que {joueur} va continuer à agrandir le village ?
+B: Avec tout ce qui se construit ici ? Évidemment !
+A: Haha ! Bientôt, il faudra une carte pour s'y retrouver.
+=> END
+
+~ banc_vue
+A: D'ici, on voit toute l'île.
+B: C'est mon endroit préféré.
+A: Le mien aussi, maintenant.
+=> END
+
+~ banc_souvenir
+A: Tu te souviens comme l'île était vide, au début ?
+B: Pas une fleur, pas une maison...
+A: Et regarde-la maintenant.
+=> END
+
+~ banc_meteo
+A: Il va faire beau demain, je le sens.
+B: Tu dis ça tous les jours.
+A: Et un jour, j'aurai raison !
+=> END
+
+~ feu_histoire
+A: Vous connaissez l'histoire de l'épave sur la plage ?
+B: On dit qu'elle était là bien avant nous...
+C: Arrête, tu vas me faire peur !
+=> END
+
+~ feu_etoiles
+A: Il y a tellement d'étoiles ce soir.
+B: Là-bas, celle qui brille plus fort... on dirait qu'elle nous regarde.
+A: Elle veille sur l'île, c'est sûr.
+=> END
+
+~ feu_cuisine
+A: Quelqu'un a faim ? J'ai apporté des fruits.
+B: Grillés au feu de camp, ils seraient parfaits !
+C: Garde-m'en un !
+=> END
+
+# --- Découvertes : le lendemain d'une construction (Moments)
+
+~ decouvre
+% Oh... c'était là hier ?
+% Tiens, c'est nouveau, ça !
+% Qui a fait ça ? C'est joli !
+=> END
+
+~ decouvre_fontaine
+% Oh... une fontaine ! Elle était là hier ?
+% Le bruit de l'eau, c'est si apaisant.
+=> END
+
+~ decouvre_potager
+% Un potager ! Je pourrais peut-être aider avec ça.
+% Des plantations... on va bientôt manger frais !
+=> END
+
+~ decouvre_banc
+% Un banc ! Parfait pour souffler un peu.
+% Viens, on s'assoit une minute ?
+=> END
+
+~ decouvre_feu
+% Un feu de camp... on pourra s'y retrouver le soir !
+% Rien de tel qu'un bon feu pour se réchauffer.
+=> END
+
+~ decouvre_lanterne
+% Une lanterne ! Le soir, on y verra plus clair.
+=> END
+
+~ decouvre_etal
+% On dirait un vrai petit marché, maintenant !
+% Il ne manque plus que des clients... et des choses à vendre.
+=> END
+
+~ decouvre_cloture
+% Une clôture... ça fait tout de suite plus village.
+=> END
+
+# --- Tâches confiées par le joueur (ResidentJobs)
+
+~ tache_ok
+% D'accord, je m'en occupe !
+% Compte sur moi.
+% C'est comme si c'était fait.
+=> END
+
+~ tache_finie
+% Voilà, c'est fait !
+% Et voilà le travail !
+% Fini ! L'île est un peu plus belle.
+=> END
+
+~ tache_rien
+% Je n'ai rien trouvé à faire par ici.
+% Tout est déjà en ordre dans le coin !
+=> END
+
+# --- Le mystère de l'épave (Mystery)
+
+~ epave_doute
+Tu sais... cette épave, sur la plage... elle n'est peut-être pas la tienne.
+Elle était déjà là bien avant que j'arrive sur l'île.
 => END

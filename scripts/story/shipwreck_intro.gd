@@ -88,7 +88,7 @@ func run(m: Node, overlay: StoryOverlay) -> void:
 	await _move(pos + out * 9.0 + side * 16.0 + Vector3.UP * 7.0, pos + out * 6.0 - side * 4.0, 5.0)
 
 	# --- Retour derrière le joueur : à lui de jouer.
-	main._gameplay_camera(atan2(out.x, out.z))
+	main.gameplay_camera(atan2(out.x, out.z))
 	rig.snap()
 	var gt := rig.gameplay_transform()
 	await _move(gt.origin, gt.origin - gt.basis.z * 10.0, 2.4)

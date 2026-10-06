@@ -4,7 +4,7 @@ extends RefCounted
 ## on ne marche pas dans l'eau, on contourne les arbres, maisons et autres
 ## objets, et on ne monte (ou ne descend) qu'un bloc à la fois.
 
-const MAX_EXPANDED := 6000
+const MAX_EXPANDED := 20000
 ## Étapes de recherche permises par image (toutes recherches confondues).
 const STEPS_PER_FRAME := 200
 const DIRS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),

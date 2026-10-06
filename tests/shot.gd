@@ -33,7 +33,7 @@ func _ready() -> void:
 	await _wait(30)
 	await _shot("11_ruin")
 	# 3. Vue d'ensemble.
-	main.player.teleport(Vector3(128, 30, 128))
+	main.player.teleport(Vector3(IslandGenerator.CENTER, 30, IslandGenerator.CENTER))
 	main.rig.pitch = -1.0
 	main.rig.distance = 28.0
 	main.rig.pitch = -1.1

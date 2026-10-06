@@ -90,3 +90,78 @@ Une maison... avec l'établi, ça devrait être possible.
 C'est un peu vide ici...
 Je pourrais fabriquer quelques meubles à l'établi.
 => END
+
+# --- Découvrir l'archipel (Expeditions)
+
+~ barque_idee
+Il y a de plus en plus de monde sur l'île...
+Et cette vieille barque, sur la plage... elle pourrait peut-être encore flotter ?
+=> END
+
+~ barque
+Une vieille barque, à moitié ensablée.
+La coque tient encore... il manque des planches, une voile, de la corde.
+Avec un peu d'aide, elle pourrait peut-être encore flotter...
+=> END
+
+~ barque_ok
+Et voilà ! Elle flotte !
+Au loin, on aperçoit une autre île... des palmiers, du sable blanc.
+Il est temps d'explorer l'archipel.
+=> END
+
+~ coque
+Plus au nord, la mer est couverte de glace.
+Avec cette coque, la barque ne tiendrait pas une minute.
+Il faudrait la renforcer avec de la pierre et des poutres.
+=> END
+
+~ coque_ok
+La coque est solide, maintenant.
+Les eaux glacées du nord ne me font plus peur.
+=> END
+
+~ phare_eteint
+Une vieille tour de pierre, au milieu des ruines.
+Tout en haut, des traces de suie... on faisait du feu, là-haut ?
+=> END
+
+~ phare
+Cette tour... c'était un phare !
+Si on rallumait le signal, on pourrait peut-être repérer les îles qu'on ne voit jamais.
+Il faudrait du verre pour la lanterne, et de la pierre pour réparer le haut.
+=> END
+
+~ phare_ok
+La lumière brille de nouveau au sommet de la tour.
+Là-bas, loin vers l'ouest... une lueur rouge répond. Une île au volcan !
+=> END
+
+# --- Le mystère de l'épave (Mystery) : par petites touches, jamais expliqué
+
+~ caisse
+Une vieille caisse, à moitié enfouie dans le sable.
+Le bois est bien plus usé que celui de l'épave...
+=> END
+
+~ caisse_vide
+Il n'y a plus rien dedans.
+=> END
+
+~ carte
+Une carte de l'archipel... dessinée à la main.
+Elle est très ancienne. Bien plus que l'épave.
+Quelqu'un a entouré une tour, près de la plage.
+=> END
+
+~ carnet
+Un carnet, caché sous les outils rouillés.
+Les pages sont jaunies... quelqu'un a vécu ici, seul, il y a très longtemps.
+« Si quelqu'un trouve ce carnet... prends soin de l'île. »
+=> END
+
+~ mystere_fin
+J'ai encore pensé à ce carnet, cette nuit.
+Je me demande ce qui est arrivé à cette personne...
+Peut-être que l'île garde encore quelques secrets.
+=> END

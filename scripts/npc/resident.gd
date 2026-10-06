@@ -1,4 +1,4 @@
-class_name Creature
+class_name Resident
 extends Node3D
 ## Habitant de l'île : se promène tranquillement, discute avec le joueur,
 ## et va travailler sur les chantiers (construction, démolition) quand il
@@ -29,13 +29,18 @@ var site_id := ""
 var _slot := Vector3.ZERO
 var _site_center := Vector3.ZERO
 var _stuck := 0.0
-## Routine : activité en cours (voir main._npc_ai).
+## Routine : activité en cours (voir ResidentAI).
 var activity := ""
 var idle_time := 0.0
 var _goal := Vector3.ZERO
 var _goal_face := Vector3.ZERO
 var _act_anim := ""
 var _bubble: Label3D
+## Appelé quand l'habitant arrive là où on l'a envoyé (go) : réagir à une
+## nouveauté, ramasser un déchet, planter un arbre...
+var on_arrive := Callable()
+## Tâche confiée par le joueur (« Va nettoyer », « Va planter ») : {"type", "left"}.
+var job := {}
 var _bubble_t := 0.0
 var voice := 1.0
 ## Recherche de chemin (partagée) ; sans elle, l'habitant marche tout droit.
@@ -94,7 +99,8 @@ func _ready() -> void:
 
 
 func set_label_visible(v: bool, prompt := false) -> void:
-	_label.visible = v
+	# Pendant qu'il parle (bulle), son nom s'efface pour ne pas la masquer.
+	_label.visible = v and not (_bubble != null and _bubble.visible)
 	_label.text = data["name"] + ("\n[E] Parler" if prompt else "")
 
 
@@ -125,7 +131,9 @@ func assign(id: String, slot: Vector3, center: Vector3) -> void:
 
 ## Va quelque part puis y fait une activité pendant `dur` secondes.
 ## act : "idle", "sit", "pickup", "chat", "home" (rentrer chez soi), "dance".
-func go(pos: Vector3, act: String, dur: float, face := Vector3.INF) -> void:
+## `arrive` : appelé à l'arrivée (remplace l'éventuel précédent).
+func go(pos: Vector3, act: String, dur: float, face := Vector3.INF, arrive := Callable()) -> void:
+	on_arrive = arrive
 	_goal = pos
 	_goal_face = face
 	activity = act
@@ -162,23 +170,48 @@ func is_free() -> bool:
 
 ## Petite bulle et petit son (« Hm-hm ! ») quand il parle à un voisin.
 func chatter() -> void:
+	say(CHATTER.pick_random(), 2.0)
+
+
+## Une phrase dans une bulle au-dessus de la tête (et un petit son).
+func say(text: String, dur := 3.0) -> void:
 	if _bubble == null:
 		_bubble = Label3D.new()
 		_bubble.font = UIStyle.font()
-		_bubble.font_size = 28
+		_bubble.font_size = 26
 		_bubble.outline_size = 9
 		_bubble.modulate = UIStyle.TEXT
 		_bubble.outline_modulate = Color(1, 1, 1, 0.95)
 		_bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		_bubble.fixed_size = true
 		_bubble.pixel_size = 0.001
-		_bubble.position.y = Player.MODEL_HEIGHT + 0.75
+		_bubble.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_bubble.width = 420.0
+		# Le texte pousse vers le haut à partir d'au-dessus de la tête.
+		_bubble.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+		_bubble.position.y = _label.position.y + 0.1
 		add_child(_bubble)
-	_bubble.text = CHATTER.pick_random()
+	_bubble.text = text
 	_bubble.visible = true
-	_bubble_t = 2.0
+	_label.visible = false
+	_bubble_t = dur
 	if visible and is_inside_tree():
 		Audio.play("talk", -12.0, 0.15, voice)
+
+
+## Fait coucou au joueur qui passe (sans se lever s'il est assis).
+func wave(at: Vector3, text: String) -> void:
+	if activity != "sit":
+		var d := at - position
+		_facing = atan2(d.x, d.z)
+		_celebrate = 1.0
+	say(text, 2.2)
+
+
+## Prolonge l'activité en cours (une conversation sur le banc...).
+func stay(seconds: float) -> void:
+	if state == State.ACT:
+		_timer = maxf(_timer, seconds)
 
 
 func release() -> void:
@@ -213,6 +246,10 @@ func _process(delta: float) -> void:
 					return
 				if activity == "chat":
 					chatter()
+				if on_arrive.is_valid():
+					var cb := on_arrive
+					on_arrive = Callable()
+					cb.call()
 		State.ACT:
 			if _timer <= 0.0:
 				activity = ""
@@ -235,7 +272,7 @@ func _process(delta: float) -> void:
 		State.WALK:
 			_walk(delta)
 
-	# Garde la créature posée sur le sol.
+	# Garde l'habitant posé sur le sol.
 	var gy := _ground_at(position.x, position.z, position.y + 1.4)
 	if gy > -100.0:
 		position.y = lerpf(position.y, gy, minf(1.0, delta * 10.0))

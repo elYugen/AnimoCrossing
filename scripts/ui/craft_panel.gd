@@ -4,6 +4,7 @@ extends Control
 ## (miniatures 3D). À une table d'artisan (`table`), on peut aussi fabriquer.
 
 signal closed
+signal crafted(recipe: Dictionary)
 
 var table := false
 
@@ -211,6 +212,7 @@ func _recipe_row(r: Dictionary) -> PanelContainer:
 	b.pressed.connect(func():
 		if Crafting.craft(r):
 			Audio.play("place_wood", -4.0)
-			Game.save_game())
+			Game.save_game()
+			crafted.emit(r))
 	h.add_child(b)
 	return p

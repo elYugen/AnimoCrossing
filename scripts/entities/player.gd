@@ -3,6 +3,9 @@ extends CharacterBody3D
 ## Le joueur : un personnage voxel Kenney (Blocky Characters, CC0)
 ## capable de façonner l'île grâce à ses pouvoirs.
 
+## Un pas (pour les traces dans la neige) : position au sol, bloc dessous, direction.
+signal stepped(pos: Vector3, block: int, facing: float)
+
 const SPEED := 5.2
 const ACCEL := 14.0
 const GRAVITY := 24.0
@@ -223,6 +226,7 @@ func _physics_process(delta: float) -> void:
 			_step_timer = 0.36
 			var below := world.get_block(floori(global_position.x), floori(global_position.y - 0.2), floori(global_position.z))
 			Audio.play(_step_sound(below), -14.0, 0.12)
+			stepped.emit(global_position, below, _facing)
 	else:
 		_step_timer = 0.0
 

@@ -25,7 +25,16 @@ const SPECIES := {
 }
 
 
+## Rencontres rares, liées à la météo (WeatherFX) : jamais là par hasard.
+const RARE := {
+	"spirit_deer": {"name": "Cerf des brumes", "model": "deer", "weather": "fog",
+		"desc": "Il n'apparaît que dans le brouillard, au fond des bois. Il regarde, puis s'efface."},
+}
+
+
 static func name_of(sp: String) -> String:
+	if RARE.has(sp):
+		return RARE[sp]["name"]
 	return (SPECIES.get(sp, {}) as Dictionary).get("name", sp)
 
 

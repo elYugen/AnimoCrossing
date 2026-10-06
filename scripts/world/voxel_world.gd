@@ -3,9 +3,9 @@ extends Node3D
 ## Monde voxel d'une île : stockage, maillage par chunks avec occlusion
 ## ambiante par sommet, collisions et raycast DDA.
 
-const SX := 256
+const SX := 384
 const SY := 40
-const SZ := 256
+const SZ := 384
 const CHUNK := 16
 const AO_CURVE: Array[float] = [0.5, 0.67, 0.83, 1.0]
 const GRASS_BAND := 0.72

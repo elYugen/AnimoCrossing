@@ -32,8 +32,7 @@ var main: Node
 
 var _root: Control
 var _island_label: Label
-var _stars_label: Label  # (masqué)
-var _friends_label: Label  # (masqué)
+var _residents_label: Label  # (masqué)
 var _obj_list: VBoxContainer
 var _power_slots: Array[PanelContainer] = []
 var _block_bar: HBoxContainer
@@ -58,7 +57,7 @@ var _item_sub: Label
 var _item_timer := 0.0
 var _tuto_count := 0
 var _popup: Control
-var _popup_preview: CreaturePreview
+var _popup_preview: ResidentPreview
 var _popup_name: Label
 var _popup_timer := 0.0
 var _fade: ColorRect
@@ -86,6 +85,8 @@ var _open_panel: Control = null
 
 var _power := 0
 var _block := Blocks.GRASS
+var _gains: VBoxContainer
+var _gain_rows := {}  # clé -> {"panel", "label", "n", "tween"}
 
 
 func setup(m: Node) -> void:
@@ -107,6 +108,7 @@ func _ready() -> void:
 	_crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_crosshair)
 	_build_toasts()
+	_build_gains()
 	_build_dialog()
 	_build_tutorial()
 	_build_popup()
@@ -162,10 +164,8 @@ func _build_top_left() -> void:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 18)
 	vb.add_child(hb)
-	_stars_label = UIStyle.label("", 20, UIStyle.STAR.darkened(0.1))
-	hb.add_child(_stars_label)
-	_friends_label = UIStyle.label("", 20, UIStyle.GREEN_DARK)
-	hb.add_child(_friends_label)
+	_residents_label = UIStyle.label("", 20, UIStyle.GREEN_DARK)
+	hb.add_child(_residents_label)
 	var inv := HBoxContainer.new()
 	inv.add_theme_constant_override("separation", 12)
 	vb.add_child(inv)
@@ -200,7 +200,7 @@ func _build_objectives() -> void:
 	_vit_tier = UIStyle.label("", 15, UIStyle.TEXT_SOFT)
 	_vit_tier.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	head.add_child(_vit_tier)
-	_vit_pct = UIStyle.label("", 26, UIStyle.GREEN_DARK)
+	_vit_pct = UIStyle.label("", 19, UIStyle.GREEN_DARK)
 	head.add_child(_vit_pct)
 	_vit_bar = ProgressBar.new()
 	_vit_bar.custom_minimum_size = Vector2(170, 8)
@@ -372,7 +372,7 @@ func _build_popup() -> void:
 	var vb := VBoxContainer.new()
 	p.add_child(vb)
 	vb.add_child(UIStyle.title("Un nouvel habitant est arrivé !", 28))
-	_popup_preview = CreaturePreview.new()
+	_popup_preview = ResidentPreview.new()
 	_popup_preview.custom_minimum_size = Vector2(320, 220)
 	_popup_preview.spin_speed = 1.5
 	vb.add_child(_popup_preview)
@@ -486,7 +486,7 @@ func _build_pause() -> void:
 	var all_b := UIStyle.button("Faire venir tous les habitants", 17)
 	all_b.pressed.connect(func():
 		Game.admin_all_residents()
-		main.respawn_creatures()
+		main.respawn_residents()
 		toast("Tous les habitants sont arrivés !", UIStyle.GREEN_DARK))
 	_admin_box.add_child(all_b)
 	var tuto_b := UIStyle.button("Passer le tutoriel", 17)
@@ -576,21 +576,22 @@ func _refresh_inventory() -> void:
 
 func _refresh_top() -> void:
 	_island_label.text = IslandDB.get_island(Game.current_island)["name"]
-	_friends_label.text = "%d habitants" % Game.resident_count()
+	_residents_label.text = "%d habitants" % Game.resident_count()
 
 
 func _refresh_objectives() -> void:
 	var isl := Game.current_island
 	var pct := Vitality.percent(isl)
-	_vit_pct.text = "%d %%" % pct
+	# Pas de pourcentage : le nom du palier, et une jauge qui se remplit.
+	_vit_pct.text = Vitality.tier_name(pct)
 	_vit_bar.value = pct
 	_vit_tier.text = IslandDB.get_island(isl)["name"]
-	# Annonce quand l'île change de palier.
+	# Quand l'île passe un palier : ce qui change, dit simplement.
 	var last: int = _vit_last.get(isl, -1)
 	_vit_last[isl] = pct
-	if last >= 0 and Vitality.tier_index(pct) > Vitality.tier_index(last):
-		var sub := "Mais il reste encore beaucoup de choses à découvrir..." if pct >= 100 else "L'île devient plus accueillante."
-		show_item_popup("%d %% — %s" % [pct, Vitality.tier_name(pct)], sub, false)
+	var t := Vitality.tier_index(pct)
+	if last >= 0 and t > Vitality.tier_index(last):
+		show_item_popup(Vitality.tier_name(pct), IslandLife.NEWS[t], false)
 		Audio.play("jingle_common", -6.0, 0.0)
 
 
@@ -622,10 +623,13 @@ func placeables() -> Array:
 				if Game.admin or Game.structure_count(fk) > 0:
 					out.append(fk)
 		return out
+	# Dehors : les blocs, puis les constructions et les meubles fabriqués.
 	for id in Game.available_blocks():
 		out.append(id)
 	for r in Crafting.RECIPES:
 		var k: String = r.get("structure", "")
+		if r.has("furniture"):
+			k = "f_" + r["furniture"]
 		if k != "" and not k in out and (Game.admin or Game.structure_count(k) > 0):
 			out.append(k)
 	return out
@@ -707,6 +711,68 @@ func power_unlocked(i: int) -> bool:
 
 
 # --- Notifications -------------------------------------------------------
+
+## Fil des gains, en bas à gauche : « +1 Terre », « +3 Branches »...
+func _build_gains() -> void:
+	var mc := _anchored(Control.PRESET_BOTTOM_LEFT, Vector2(18, 120))
+	mc.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_gains = VBoxContainer.new()
+	_gains.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_gains.alignment = BoxContainer.ALIGNMENT_END
+	_gains.add_theme_constant_override("separation", 4)
+	mc.add_child(_gains)
+
+
+## Le joueur récupère quelque chose. Les gains de même clé, rapprochés, se
+## cumulent sur la même ligne (« +1 Pierre » puis « +2 Pierres »...).
+## `label` est le nom à afficher pour le total (déjà au pluriel si besoin).
+func show_gain(key: String, label: String, n: int, col: Color) -> void:
+	var row: Dictionary = _gain_rows.get(key, {})
+	if not row.is_empty() and is_instance_valid(row["panel"]):
+		row["n"] = int(row["n"]) + n
+		(row["tween"] as Tween).kill()
+	else:
+		var p := PanelContainer.new()
+		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		p.add_theme_stylebox_override("panel", UIStyle.box(UIStyle.PANEL, 12, UIStyle.BORDER, 2, 8))
+		var hb := HBoxContainer.new()
+		hb.add_theme_constant_override("separation", 8)
+		p.add_child(hb)
+		var dot := ColorRect.new()
+		dot.custom_minimum_size = Vector2(14, 14)
+		dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		dot.color = col
+		hb.add_child(dot)
+		var l := UIStyle.label("", 17, UIStyle.TEXT)
+		hb.add_child(l)
+		p.set_meta("key", key)
+		_gains.add_child(p)
+		while _gains.get_child_count() > 5:
+			var old := _gains.get_child(0)
+			_gain_rows.erase(old.get_meta("key"))
+			_gains.remove_child(old)
+			old.queue_free()
+		row = {"panel": p, "label": l, "n": n}
+		_gain_rows[key] = row
+	var total := int(row["n"])
+	# Le pluriel vient du nom donné pour le dernier gain ; on l'ajuste au total.
+	var shown := label
+	if key in Items.ALL:
+		shown = Items.name_of(key, total)
+	(row["label"] as Label).text = "+%d %s" % [total, shown]
+	var panel: PanelContainer = row["panel"]
+	panel.modulate.a = 1.0
+	panel.pivot_offset = panel.size * 0.5
+	panel.scale = Vector2(1.12, 1.12)
+	var tw := panel.create_tween()
+	tw.tween_property(panel, "scale", Vector2.ONE, 0.15)
+	tw.tween_interval(2.2)
+	tw.tween_property(panel, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(func():
+		_gain_rows.erase(key)
+		panel.queue_free())
+	row["tween"] = tw
+
 
 func toast(text: String, col := UIStyle.TEXT) -> void:
 	var p := PanelContainer.new()
@@ -804,6 +870,7 @@ func toggle_panel(which: String) -> void:
 			if _craft == null:
 				_craft = CraftPanel.new()
 				_craft.closed.connect(close_panel)
+				_craft.crafted.connect(_on_crafted)
 			_open_panel = _craft
 			_craft.table = _craft_at_table
 			_craft_at_table = false
@@ -853,6 +920,21 @@ func show_choice(title: String, options: Array, on_pick: Callable) -> void:
 
 
 ## Inventaire (I) ou fabrication (à une table d'artisan).
+## Ce qu'on vient de fabriquer apparaît dans le fil des gains ; une
+## construction ou un meuble est aussi sélectionné, prêt à être posé.
+func _on_crafted(r: Dictionary) -> void:
+	var n := int(r["n"])
+	if r.has("item"):
+		show_gain(r["item"], Items.name_of(r["item"], n), n, Items.color_of(r["item"]))
+	elif r.has("block"):
+		show_gain("block:%d" % int(r["block"]), Blocks.block_name(int(r["block"])), n, Blocks.main_color(int(r["block"])))
+	else:
+		var k: String = "f_" + r["furniture"] if r.has("furniture") else r["structure"]
+		show_gain(k, Crafting.structure_name(k), n, UIStyle.POWER_COLORS[1])
+		structure_selected.emit(k)
+		toast("%s prêt à poser : clique pour le placer (R pour tourner)" % Crafting.structure_name(k), UIStyle.GREEN_DARK)
+
+
 func open_crafting(at_table: bool) -> void:
 	_craft_at_table = at_table
 	if _open_panel and _open_panel.name == "craft":

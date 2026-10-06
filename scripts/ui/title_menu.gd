@@ -42,7 +42,7 @@ func _ready() -> void:
 	var col := VBoxContainer.new()
 	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_theme_constant_override("separation", 26)
+	col.add_theme_constant_override("separation", 4)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(col)
 
@@ -50,14 +50,14 @@ func _ready() -> void:
 	_logo = VBoxContainer.new()
 	_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(_logo)
-	var title := UIStyle.title("Animo", 110)
-	title.add_theme_color_override("font_color", Color("7bc95a"))
-	title.add_theme_color_override("font_outline_color", Color("fff8ec"))
-	title.add_theme_constant_override("outline_size", 28)
-	title.add_theme_color_override("font_shadow_color", Color(0.35, 0.25, 0.15, 0.35))
-	title.add_theme_constant_override("shadow_offset_y", 8)
-	_logo.add_child(title)
-	var sub := UIStyle.title("L'archipel des créatures", 26)
+	var logo := TextureRect.new()
+	logo.texture = load("res://assets/logo.png")
+	logo.custom_minimum_size = Vector2(600, 400)
+	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_logo.add_child(logo)
+	var sub := UIStyle.title("Un archipel à faire revivre", 24)
 	sub.add_theme_color_override("font_color", UIStyle.TEXT)
 	sub.add_theme_color_override("font_outline_color", Color("fff8ec"))
 	sub.add_theme_constant_override("outline_size", 10)
@@ -90,7 +90,7 @@ func _ready() -> void:
 	quit.pressed.connect(func(): get_tree().quit())
 	_menu.add_child(quit)
 
-	var foot := UIStyle.label("v0.3 · Assets Kenney & OpenGameArt (CC0)", 13, UIStyle.TEXT_SOFT)
+	var foot := UIStyle.label("Evergrove v0.4 · Assets Kenney & OpenGameArt (CC0)", 13, UIStyle.TEXT_SOFT)
 	foot.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	foot.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	foot.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -134,7 +134,7 @@ func _build_options() -> void:
 		Game.save_game()
 		_refresh_options())
 	body.add_child(_admin_button)
-	var hint := UIStyle.label("Mode admin : tout débloqué, gacha gratuit, vol libre (V).", 14, UIStyle.TEXT_SOFT)
+	var hint := UIStyle.label("Mode admin : tout débloqué, fabrication gratuite, vol libre (V).", 14, UIStyle.TEXT_SOFT)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.custom_minimum_size.x = 400
 	body.add_child(hint)

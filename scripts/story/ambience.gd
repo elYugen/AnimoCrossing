@@ -1,8 +1,9 @@
 class_name Ambience
 extends Node
 ## Ambiance sonore synthétisée en temps réel (aucun fichier audio) :
-## vagues (bruit brun modulé par la houle), vent (bruit filtré qui siffle)
-## et craquements de bois (frottements excitant des résonateurs).
+## vagues (bruit brun modulé par la houle), vent (bruit filtré qui siffle),
+## craquements de bois (frottements excitant des résonateurs), pluie et
+## tonnerre, chants d'oiseaux (glissandos aigus) et grillons la nuit.
 ## Les niveaux se règlent avec `fade_to()`.
 
 const RATE := 22050.0
@@ -11,6 +12,21 @@ var waves := 0.0
 var wind := 0.0
 var creaks := 0.0  # 0 = aucun craquement, 1 = fréquents
 var rain := 0.0  # pluie (bruissement + gouttes)
+var birds := 0.0  # 0 = silence, 1 = l'île chante (suit la vitalité)
+var crickets := 0.0  # grillons, la nuit
+# Oiseaux : un chant = quelques notes glissées
+var _bd_left := 0.0  # durée restante de la note (s)
+var _bd_len := 0.1
+var _bd_f0 := 3000.0
+var _bd_f1 := 4000.0
+var _bd_ph := 0.0
+var _bd_notes := 0
+var _bd_wait := 2.0
+var _bd_amp := 0.0
+var _bd_pan := 0.5
+# Grillons : trilles d'une note aiguë pulsée
+var _cr_ph := 0.0
+var _cr_t := 0.0
 var _r_lp := 0.0
 var _r_lp2 := 0.0
 var _thunder := 0.0
@@ -122,6 +138,20 @@ func render(n: int, delta: float) -> PackedVector2Array:
 		_r1c = _resonator(randf_range(260.0, 380.0), 0.9965)
 		_r2c = _resonator(randf_range(700.0, 1050.0), 0.994)
 
+	# Oiseaux : de temps en temps, un chant de 2 à 6 notes.
+	_bd_wait -= delta
+	if birds > 0.01 and _bd_left <= 0.0 and _bd_wait <= 0.0:
+		if _bd_notes <= 0:
+			_bd_notes = randi_range(2, 6)
+			_bd_pan = randf_range(0.15, 0.85)
+			_bd_amp = randf_range(0.04, 0.09) * (0.5 + 0.5 * birds)
+		_bd_len = randf_range(0.05, 0.16)
+		_bd_left = _bd_len
+		_bd_f0 = randf_range(2400.0, 4200.0)
+		_bd_f1 = _bd_f0 * randf_range(0.7, 1.45)
+		_bd_notes -= 1
+		_bd_wait = randf_range(0.03, 0.12) if _bd_notes > 0 else randf_range(1.0, 7.0) / maxf(birds, 0.1)
+
 	_buf.resize(n)
 	var inv := 1.0 / RATE
 	for i in n:
@@ -168,6 +198,23 @@ func render(n: int, delta: float) -> PackedVector2Array:
 			_th_brown = (_th_brown + 0.02 * white) / 1.02
 			rn += _th_brown * 6.0 * _thunder
 			_thunder *= 0.99996
-		var mono := wave + wnd + rn
-		_buf[i] = Vector2(clampf(mono + ck * (1.0 - _ck_pan), -1.0, 1.0), clampf(mono + ck * _ck_pan, -1.0, 1.0))
+		# --- Oiseau : note glissée, enveloppe en cloche.
+		var bd := 0.0
+		if _bd_left > 0.0:
+			var q := 1.0 - _bd_left / _bd_len
+			_bd_ph = fmod(_bd_ph + lerpf(_bd_f0, _bd_f1, q) * inv, 1.0)
+			bd = sin(TAU * _bd_ph) * sin(PI * q) * _bd_amp
+			_bd_left -= inv
+		# --- Grillons : note à 4,4 kHz hachée 30 fois par seconde, par trilles.
+		var cr := 0.0
+		if crickets > 0.01:
+			_cr_t += inv
+			if _cr_t > 0.9:
+				_cr_t = 0.0
+			if _cr_t < 0.35:
+				_cr_ph = fmod(_cr_ph + 4400.0 * inv, 1.0)
+				var pulse := maxf(0.0, sin(TAU * 30.0 * _cr_t))
+				cr = sin(TAU * _cr_ph) * pulse * 0.025 * crickets
+		var mono := wave + wnd + rn + cr
+		_buf[i] = Vector2(clampf(mono + ck * (1.0 - _ck_pan) + bd * (1.0 - _bd_pan), -1.0, 1.0), clampf(mono + ck * _ck_pan + bd * _bd_pan, -1.0, 1.0))
 	return _buf

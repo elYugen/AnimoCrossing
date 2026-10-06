@@ -13,6 +13,9 @@ const PITCH_MAX := 0.6
 
 var target: Node3D
 var world: VoxelWorld
+## Objets 3D de l'île : la caméra ne doit pas rentrer dedans (sauf les arbres,
+## effacés quand ils cachent le joueur).
+var props: Props
 var camera: Camera3D
 var yaw := 0.0
 var pitch := -0.32
@@ -85,6 +88,20 @@ func _clear_distance(want: float) -> float:
 		if world.is_opaque(x, y, z) and not world.get_block(x, y, z) in VoxelWorld.SEE_THROUGH:
 			return maxf(0.6, t - 0.35)
 		t += 0.25
+	# Objets 3D (établi, maisons, caisses...) sur le trajet de la caméra.
+	if props and is_inside_tree():
+		var exclude: Array[RID] = []
+		if target is CollisionObject3D:
+			exclude.append((target as CollisionObject3D).get_rid())
+		for i in 3:
+			var q := PhysicsRayQueryParameters3D.create(origin, origin + dir * want, Props.LAYER, exclude)
+			var hit := get_world_3d().direct_space_state.intersect_ray(q)
+			if hit.is_empty():
+				break
+			var id := props.id_from_collider(hit["collider"])
+			if id > 0 and not Props.is_tree(props.kind_of(id)) and Props.KINDS[props.kind_of(id)]["shape"] != "none":
+				return maxf(0.6, origin.distance_to(hit["position"]) - 0.35)
+			exclude.append(hit["rid"])
 	return want
 
 

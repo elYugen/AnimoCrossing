@@ -9,8 +9,8 @@ const SFX := {
 	"step_grass": 5, "step_snow": 5, "step_wood": 5, "step_stone": 5,
 	"bloom": 2, "tree": 1,
 	"click": 1, "open": 1, "close": 1, "select": 1, "error": 1, "confirm": 1,
-	"talk": 2, "book": 1, "coins": 1, "shake": 1, "capsule": 1,
-	"jingle_friend": 1, "jingle_common": 1, "jingle_rare": 1, "jingle_legend": 1, "jingle_island": 1,
+	"talk": 2, "book": 1,
+	"jingle_resident": 1, "jingle_common": 1, "jingle_rare": 1, "jingle_island": 1,
 }
 const MUSIC := {
 	"prairie": "res://assets/audio/music/prairie.mp3",

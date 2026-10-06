@@ -11,7 +11,9 @@ const DIR := "res://assets/models/%s.glb"
 ## model : chemin sous assets/models ; scale : échelle de base ;
 ## shape : "trunk" (cylindre), "box" (boîte englobante) ou "none" ;
 ## tree : compte comme un arbre ; cut : peut être retiré avec l'outil.
-const KINDS := {
+## Les meubles (« f_<modèle> », voir Interior.FURNITURE) sont ajoutés au
+## démarrage : on peut aussi les poser dehors.
+static var KINDS := {
 	# Arbres : Fantasy Town & Survival (feuillus), Pirate (palmiers), Holiday (sapins)
 	"town_tree": {"model": "town/tree", "scale": 2.4, "shape": "trunk", "tree": true, "cut": true},
 	"town_crooked": {"model": "town/tree-crooked", "scale": 2.4, "shape": "trunk", "tree": true, "cut": true},
@@ -59,18 +61,18 @@ const KINDS := {
 	"house_p": {"model": "houses/building-type-p", "scale": 5.0, "shape": "box", "structure": true, "house": true, "site": true},
 	# Campement abandonné (Survival Kit)
 	"tent": {"model": "survival/tent-canvas", "scale": 6.5, "shape": "box"},
-	"bedroll": {"model": "survival/bedroll", "scale": 4.5, "shape": "none"},
-	"workbench": {"model": "survival/workbench", "scale": 5.5, "shape": "box", "structure": true, "craft": true},
-	"box": {"model": "survival/box", "scale": 4.5, "shape": "box"},
-	"box_large": {"model": "survival/box-large", "scale": 4.5, "shape": "box"},
-	"barrel_old": {"model": "survival/barrel", "scale": 4.5, "shape": "box"},
+	"bedroll": {"model": "survival/bedroll", "scale": 3.0, "shape": "none"},
+	"workbench": {"model": "survival/workbench", "scale": 3.6, "shape": "box", "structure": true, "craft": true},
+	"box": {"model": "survival/box", "scale": 2.8, "shape": "box"},
+	"box_large": {"model": "survival/box-large", "scale": 2.8, "shape": "box"},
+	"barrel_old": {"model": "survival/barrel", "scale": 2.6, "shape": "box"},
 	"campfire_old": {"model": "survival/campfire-pit", "scale": 4.0, "shape": "none"},
-	"signpost": {"model": "survival/signpost", "scale": 4.5, "shape": "box"},
+	"signpost": {"model": "survival/signpost", "scale": 3.4, "shape": "box"},
 	# Épave et objets échoués (Pirate Kit)
 	"wreck": {"model": "pirate/ship-wreck", "scale": 1.0, "shape": "none"},
 	"crate": {"model": "pirate/crate", "scale": 0.75, "shape": "box"},
 	"barrel": {"model": "pirate/barrel", "scale": 0.6, "shape": "box"},
-	"rowboat": {"model": "pirate/boat-row-small", "scale": 0.9, "shape": "box"},
+	"rowboat": {"model": "pirate/boat-row-small", "scale": 1.3, "shape": "box"},
 	# Ruines (Nature Kit + Fantasy Town Kit)
 	"column": {"model": "nature/statue_column", "scale": 5.0, "shape": "trunk", "demolish": {"cut_stone": 2}},
 	"column_broken": {"model": "nature/statue_columnDamaged", "scale": 5.0, "shape": "trunk", "demolish": {"cut_stone": 2}},
@@ -130,6 +132,12 @@ const PALETTE := {
 static var _scenes := {}
 static var _aabbs := {}
 
+
+static func _static_init() -> void:
+	for f in Interior.FURNITURE:
+		var flat: bool = f in Interior.FLAT
+		KINDS["f_" + f] = {"model": "furniture/" + f, "furniture": f, "scale": 1.0, "shape": "none" if flat else "box", "structure": true}
+
 var items := {}  # id -> {"kind", "node", "key", "pos", "rot", "scale"}
 ## Monde voxel : sert à poser les objets sur le vrai sol.
 var world: VoxelWorld
@@ -138,7 +146,7 @@ var on_change := Callable()
 ## Objets volontairement à moitié immergés : on ne les recale pas sur le sol.
 const NO_SNAP := ["wreck", "lily"]
 ## Objets naturels qu'on laisse s'enfoncer dans les pentes.
-const EMBED := ["barrier_rock", "rock_large", "log", "stump", "statue_head", "fence_broken"]
+const EMBED := ["barrier_rock", "rock_large", "log", "stump", "statue_head", "fence_broken", "bush", "bush_large", "mushroom"]
 var _next_id := 1
 var _island := ""
 
@@ -174,6 +182,11 @@ static func fix_materials(sc: PackedScene) -> void:
 ## Instancie le modèle d'un type d'objet (sans collision), à l'échelle.
 static func make_model(kind: String, scale_mul := 1.0) -> Node3D:
 	var def: Dictionary = KINDS[kind]
+	if def.has("furniture"):
+		# Meuble : modèle recentré (le Furniture Kit a l'origine dans un coin).
+		var holder := Interior.make_furn_model(def["furniture"])
+		holder.scale = Vector3.ONE * scale_mul
+		return holder
 	var root := Node3D.new()
 	var sc := scene(def["model"])
 	if sc:
@@ -346,6 +359,7 @@ func add_persistent(kind: String, pos: Vector3, rot := 0.0, scale_mul := 1.0, gr
 	var entry := {"kind": kind, "x": pos.x, "y": pos.y, "z": pos.z, "rot": rot, "scale": scale_mul, "key": key}
 	entry.merge(extra)
 	list.append(entry)
+	Game.stats_changed.emit()  # la vitalité dépend de ce qui est posé
 	var id := add(kind, pos, rot, scale_mul * growth(entry), key)
 	if grow and id > 0:
 		var model := (items[id]["node"] as Node3D).get_child(0) as Node3D
@@ -432,6 +446,8 @@ func remove(id: int) -> void:
 				list.remove_at(i)
 	elif key != "":
 		(Game.props_removed.get_or_add(_island, []) as Array).append(key)
+	if key.begins_with("p:"):
+		Game.stats_changed.emit()
 	if on_change.is_valid():
 		on_change.call(id, 0)
 	(it["node"] as Node3D).queue_free()

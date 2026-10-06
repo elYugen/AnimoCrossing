@@ -14,7 +14,7 @@ func _ready() -> void:
 	add_child(m["root"])
 	(m["close"] as Button).pressed.connect(func(): closed.emit())
 	var body: VBoxContainer = m["body"]
-	var sub := UIStyle.label("Attire de nouveaux amis pour débloquer d'autres îles. Tu as %d ami(s)." % Game.friend_count(), 17, UIStyle.TEXT_SOFT)
+	var sub := UIStyle.label(_subtitle(), 17, UIStyle.TEXT_SOFT)
 	sub.name = "Sub"
 	body.add_child(sub)
 	_row = HBoxContainer.new()
@@ -23,11 +23,16 @@ func _ready() -> void:
 
 
 func open() -> void:
-	(find_child("Sub", true, false) as Label).text = "Attire de nouveaux amis pour débloquer d'autres îles. Tu as %d ami(s)." % Game.friend_count()
+	(find_child("Sub", true, false) as Label).text = _subtitle()
 	for c in _row.get_children():
 		c.queue_free()
 	for isl in IslandDB.ISLANDS:
 		_row.add_child(_card(isl))
+
+
+func _subtitle() -> String:
+	var n := Game.resident_count()
+	return "Chaque île de l'archipel se découvre à sa manière. %d habitant%s installé%s." % [n, "s" if n > 1 else "", "s" if n > 1 else ""]
 
 
 func _card(isl: Dictionary) -> PanelContainer:
@@ -50,7 +55,13 @@ func _card(isl: Dictionary) -> PanelContainer:
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	d.custom_minimum_size = Vector2(210, 60)
 	vb.add_child(d)
-	vb.add_child(UIStyle.label("Habitants : %d  ·  Vitalité %d %%" % [Vitality.residents(isl["id"]), Vitality.percent(isl["id"])], 15))
+	if unlocked:
+		vb.add_child(UIStyle.label("Habitants : %d  ·  %s" % [Vitality.residents(isl["id"]), Vitality.tier_name(Vitality.percent(isl["id"]))], 15))
+	else:
+		var h := UIStyle.label(isl.get("hint", ""), 14, UIStyle.TEXT_SOFT)
+		h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		h.custom_minimum_size = Vector2(210, 0)
+		vb.add_child(h)
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(spacer)
@@ -63,7 +74,7 @@ func _card(isl: Dictionary) -> PanelContainer:
 		b.pressed.connect(func(): travel_requested.emit(isl["id"]))
 		vb.add_child(b)
 	else:
-		var b := UIStyle.button("Verrouillée · %d amis" % int(isl["residents_needed"]), 16)
+		var b := UIStyle.button("Pas encore découverte", 16)
 		b.disabled = true
 		vb.add_child(b)
 	return p

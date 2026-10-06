@@ -7,8 +7,8 @@ signal stats_changed
 signal action_done(kind: String)
 signal inventory_changed
 
-const SAVE_PATH := "user://animo_save.json"
-const SAVE_VERSION := 6  # v6 : habitants humains, composants et constructions
+const SAVE_PATH := "user://evergrove_save.json"
+const SAVE_VERSION := 7  # v7 : îles agrandies (384 x 384)
 
 var current_island := "prairie"
 var tutorial_step := 0
@@ -18,6 +18,9 @@ var inventory := {}
 var structures := {}
 ## Espèces animales déjà apparues.
 var species_seen := {}
+## Collections du carnet : {"flowers": {id: true}, "trees": {...},
+## "furniture": {...}, "islands": {...}}.
+var collections := {}
 ## Blocs possédés (id en texte -> quantité) : on ne pose que ce qu'on a cassé ou fabriqué.
 var blocks := {}
 ## Recettes déjà annoncées au joueur.
@@ -47,6 +50,9 @@ var residents := {}  # id -> {"island": String}
 var stats := {}  # island_id -> {stat: int}
 var edits := {}  # island_id -> {"x,y,z": block_id}
 var talked := {}  # habitants à qui on a parlé cette session
+## Constructions récentes que les habitants n'ont pas encore remarquées :
+## île -> [{"key", "kind", "day"}] (voir Moments).
+var novelties := {}
 var player_skin := "a"  # tenue : modèle Kenney du joueur (a..r)
 var player_head := "a"  # tête / coiffure : modèle Kenney (a..r)
 var player_name := ""
@@ -61,7 +67,18 @@ var _autosave_timer := 0.0
 
 func _ready() -> void:
 	_setup_inputs()
+	_import_old_save()
 	load_game()
+
+
+## Le jeu s'appelait Animo : sa sauvegarde est dans un autre dossier
+## (app_userdata/Animo). On la récupère une fois.
+func _import_old_save() -> void:
+	if FileAccess.file_exists(SAVE_PATH):
+		return
+	var old := OS.get_user_data_dir().get_base_dir().path_join("Animo").path_join("animo_save.json")
+	if FileAccess.file_exists(old):
+		DirAccess.copy_absolute(old, ProjectSettings.globalize_path(SAVE_PATH))
 
 
 func _process(delta: float) -> void:
@@ -184,6 +201,19 @@ func notify_action(kind: String) -> void:
 	action_done.emit(kind)
 
 
+## Ajoute une entrée à une collection du carnet. Renvoie true si elle est nouvelle.
+func collect(category: String, id: String) -> bool:
+	var c: Dictionary = collections.get_or_add(category, {})
+	if c.has(id):
+		return false
+	c[id] = true
+	return true
+
+
+func has_collected(category: String, id: String) -> bool:
+	return (collections.get(category, {}) as Dictionary).has(id)
+
+
 func add_resident(id: String, island_id: String) -> void:
 	if residents.has(id):
 		return
@@ -216,11 +246,9 @@ func resident_count() -> int:
 	return residents.size()
 
 
+## Les îles se découvrent par l'histoire (barque, coque, phare : Expeditions).
 func is_island_unlocked(island_id: String) -> bool:
-	if admin:
-		return true
-	var isl := IslandDB.get_island(island_id)
-	return resident_count() >= int(isl["residents_needed"])
+	return admin or island_id == "prairie" or has_flag("unlock_" + island_id)
 
 
 func available_blocks() -> Array[int]:
@@ -237,6 +265,7 @@ func available_blocks() -> Array[int]:
 func record_edit(island_id: String, pos: Vector3i, id: int) -> void:
 	var e: Dictionary = edits.get_or_add(island_id, {})
 	e["%d,%d,%d" % [pos.x, pos.y, pos.z]] = id
+	stats_changed.emit()  # la vitalité dépend de l'état de l'île
 
 
 func save_game() -> void:
@@ -247,6 +276,7 @@ func save_game() -> void:
 		"inventory": inventory,
 		"structures": structures,
 		"species_seen": species_seen,
+		"collections": collections,
 		"blocks": blocks,
 		"recipes_seen": recipes_seen,
 		"flags": flags,
@@ -258,6 +288,7 @@ func save_game() -> void:
 		"props_added": props_added,
 		"props_removed": props_removed,
 		"sites": sites,
+		"novelties": novelties,
 		"homes": homes,
 		"picked": picked,
 		"interiors": interiors,
@@ -291,6 +322,7 @@ func load_game() -> void:
 	inventory = parsed.get("inventory", {})
 	structures = parsed.get("structures", {})
 	species_seen = parsed.get("species_seen", {})
+	collections = parsed.get("collections", {})
 	blocks = parsed.get("blocks", {})
 	recipes_seen = parsed.get("recipes_seen", {})
 	flags = parsed.get("flags", {})
@@ -302,6 +334,7 @@ func load_game() -> void:
 	props_added = parsed.get("props_added", {})
 	props_removed = parsed.get("props_removed", {})
 	sites = parsed.get("sites", {})
+	novelties = parsed.get("novelties", {})
 	homes = parsed.get("homes", {})
 	picked = parsed.get("picked", {})
 	interiors = parsed.get("interiors", {})
@@ -319,6 +352,12 @@ func load_game() -> void:
 	music_volume = float(parsed.get("music_volume", 0.6))
 	sfx_volume = float(parsed.get("sfx_volume", 0.8))
 	admin = bool(parsed.get("admin", false))
+	# Anciennes sauvegardes : les îles débloquées par le nombre d'habitants
+	# le restent.
+	for isl in IslandDB.ISLANDS:
+		var need := int(isl["residents_needed"])
+		if need > 0 and resident_count() >= need:
+			flags["unlock_" + str(isl["id"])] = true
 	var version := int(parsed.get("version", 1))
 	if version < 4:
 		# Les îles ont changé : on garde la progression mais
@@ -330,6 +369,30 @@ func load_game() -> void:
 	if version < 6:
 		# v6 : nouvelle suite de missions ; une ancienne partie avancée la saute.
 		tutorial_step = 99 if tutorial_step >= 7 else mini(tutorial_step, 3)
+	if version < 7:
+		# v7 : les îles ont été agrandies et redessinées. On garde les
+		# habitants, l'inventaire, les amitiés et les découvertes ; ce qui
+		# était posé sur l'ancien terrain n'a plus sa place : les constructions
+		# et les meubles reviennent dans l'inventaire.
+		for isl in props_added:
+			for e in props_added[isl]:
+				var k := str(e.get("kind", ""))
+				if Props.is_structure(k):
+					structures[k] = int(structures.get(k, 0)) + 1
+		for key in interiors:
+			for e in interiors[key]:
+				var fk := "f_" + str(e.get("f", ""))
+				structures[fk] = int(structures.get(fk, 0)) + 1
+		edits = {}
+		props_added = {}
+		props_removed = {}
+		sites = {}
+		homes = {}
+		interiors = {}
+		picked = {}
+		novelties = {}
+		stats = {}
+		island_totals = {}
 
 
 ## Fait venir tous les habitants possibles sur l'île actuelle (mode admin).
@@ -352,6 +415,7 @@ func reset_game() -> void:
 	inventory = {}
 	structures = {}
 	species_seen = {}
+	collections = {}
 	blocks = {}
 	recipes_seen = {}
 	flags = {}
@@ -363,6 +427,7 @@ func reset_game() -> void:
 	props_added = {}
 	props_removed = {}
 	sites = {}
+	novelties = {}
 	homes = {}
 	interiors = {}
 	picked = {}

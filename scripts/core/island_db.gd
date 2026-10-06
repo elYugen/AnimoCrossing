@@ -1,6 +1,7 @@
 class_name IslandDB
 extends RefCounted
-## Définition des îles (biomes, couleurs, conditions de déblocage).
+## Définition des îles (biomes, couleurs). On les découvre par l'histoire
+## (Expeditions) ; `residents_needed` ne sert plus qu'aux anciennes sauvegardes.
 
 static var ISLANDS: Array[Dictionary] = [
 	{"id": "prairie", "name": "Île Prairie", "biome": "prairie", "seed": 1337, "residents_needed": 0,
@@ -9,14 +10,17 @@ static var ISLANDS: Array[Dictionary] = [
 	"sun": Color("fff3dc"), "fog": Color("cfeaff")},
 	{"id": "corail", "name": "Île Corail", "biome": "plage", "seed": 4242, "residents_needed": 3,
 	"desc": "Plages de sable fin, palmiers et eau turquoise.",
+	"hint": "La vieille barque de la plage pourrait peut-être encore flotter...",
 	"sky_top": Color("4fb0f5"), "sky_horizon": Color("d8f6ff"), "water_shallow": Color("7ff2e0"), "water_deep": Color("1fa0d8"),
 	"sun": Color("fff6e0"), "fog": Color("d8f6ff")},
 	{"id": "givree", "name": "Île Givrée", "biome": "givre", "seed": 777, "residents_needed": 7,
 	"desc": "Montagnes enneigées, sapins et lacs gelés.",
+	"hint": "Les eaux glacées sont dangereuses pour une simple barque...",
 	"sky_top": Color("8fb8e8"), "sky_horizon": Color("eef4ff"), "water_shallow": Color("9fdcf0"), "water_deep": Color("3f78b8"),
 	"sun": Color("eef4ff"), "fog": Color("e6eefa")},
 	{"id": "braise", "name": "Île Braise", "biome": "braise", "seed": 9001, "residents_needed": 12,
 	"desc": "Un volcan endormi entouré de forêts d'automne.",
+	"hint": "On ne la voit jamais... il faudrait un signal pour s'y repérer.",
 	"sky_top": Color("e89a7a"), "sky_horizon": Color("ffe0c0"), "water_shallow": Color("7fd0c8"), "water_deep": Color("2f6f9f"),
 	"sun": Color("ffd8b0"), "fog": Color("ffe4cc")},
 ]

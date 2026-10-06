@@ -126,6 +126,7 @@ static func craft(r: Dictionary) -> bool:
 		Game.add_block(int(r["block"]), int(r["n"]))
 	elif r.has("furniture"):
 		Game.add_structure("f_" + r["furniture"], int(r["n"]))
+		Game.collect("furniture", r["furniture"])
 	else:
 		Game.add_structure(r["structure"], int(r["n"]))
 	Game.notify_action("craft")

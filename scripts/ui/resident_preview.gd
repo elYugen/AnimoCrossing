@@ -1,6 +1,6 @@
-class_name CreaturePreview
+class_name ResidentPreview
 extends SubViewportContainer
-## Aperçu 3D tournant d'une créature (carnet, gacha).
+## Aperçu 3D tournant d'un habitant (carnet).
 
 var _viewport: SubViewport
 var _holder: Node3D

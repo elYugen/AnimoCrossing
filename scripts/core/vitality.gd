@@ -3,36 +3,72 @@ extends RefCounted
 ## Progression fondée sur l'état de l'île plutôt que sur des quêtes :
 ## - la Vitalité (0-100 %) mesure à quel point l'île est accueillante ;
 ## - chaque habitat (forêt, jardins, mer, montagne, village) a un score
-##   selon ce que le joueur a fait sur l'île ;
+##   selon ce qui se trouve sur l'île ;
 ## - chaque palier de vitalité fait venir un nouvel habitant le lendemain
 ##   matin, tiré au hasard parmi ceux dont l'habitat est le plus développé.
+##
+## Tout est mesuré sur l'état ACTUEL de l'île (arbres et constructions
+## présents, fleurs en place...), jamais en comptant des actions : déplacer
+## un feu de camp ne rapporte rien, le démonter fait baisser la vitalité.
+## Seuls déchets et vase retirés sont comptés (ils ne reviennent jamais).
 
 const BASE := 5
 
-## Composantes de la vitalité. `target` : valeur pour remplir la jauge
-## (un nombre, ou la quantité générée sur l'île pour les déchets / la vase).
+## Composantes de la vitalité. `measure` : voir measures() ; `target` : valeur
+## pour remplir la jauge (un nombre, ou la quantité générée sur l'île pour
+## les déchets / la vase).
 const PARTS := [
-	{"key": "tree", "label": "Arbres plantés", "stat": "tree", "target": 25, "weight": 15},
-	{"key": "flowers", "label": "Fleurs & herbe", "stat": "bloom", "target": 80, "weight": 15},
-	{"key": "water", "label": "Points d'eau nettoyés", "stat": "clean_water", "target": "water", "weight": 15},
-	{"key": "waste", "label": "Déchets retirés", "stat": "clean_waste", "target": "waste", "weight": 15},
-	{"key": "build", "label": "Constructions", "stat": "build", "target": 12, "weight": 10},
-	{"key": "fire", "label": "Feux de camp", "stat": "build_campfire", "target": 3, "weight": 10},
-	{"key": "garden", "label": "Jardins", "stat": "build_garden", "target": 10, "weight": 15},
+	{"key": "tree", "label": "Arbres plantés", "measure": "trees", "target": 25, "weight": 15},
+	{"key": "flowers", "label": "Fleurs & herbe", "measure": "flowers", "target": 80, "weight": 15},
+	{"key": "water", "label": "Points d'eau nettoyés", "measure": "clean_water", "target": "water", "weight": 15},
+	{"key": "waste", "label": "Déchets retirés", "measure": "clean_waste", "target": "waste", "weight": 15},
+	{"key": "build", "label": "Constructions", "measure": "builds", "target": 12, "weight": 10},
+	{"key": "fire", "label": "Feux de camp", "measure": "campfire", "target": 3, "weight": 10},
+	{"key": "garden", "label": "Jardins", "measure": "gardens", "target": 10, "weight": 15},
 ]
+## Hauteur à partir de laquelle on aménage la « montagne ».
+const MOUNTAIN_Y := IslandGenerator.SEA + 12
 
-const TIERS := [
-	[0, "L'île est vide"],
-	[12, "L'île commence à revivre"],
-	[25, "L'île reprend des couleurs"],
-	[45, "Une île accueillante"],
-	[65, "Une île pleine de vie"],
-	[85, "Un petit paradis"],
-	[100, "L'île est devenue un petit paradis"],
-]
 
-## Vitalité requise pour le n-ième habitant d'une île (puis +8 % par habitant).
-const ARRIVALS := [15, 22, 30, 38, 46, 54, 62, 70, 78, 86, 94]
+## Ce qui se trouve actuellement sur l'île :
+##   trees (arbres plantés), flowers (fleurs et herbe qu'on a fait pousser),
+##   builds (constructions posées, hors meubles), campfire, gardens
+##   (potagers et jardinières), planter, garden, mountain (blocs et
+##   constructions posés en hauteur), placed (blocs posés), sand (sable
+##   posé), clean_* (retirés).
+static func measures(island_id: String) -> Dictionary:
+	var m := {"trees": 0, "flowers": 0, "builds": 0, "campfire": 0, "gardens": 0, "garden": 0, "planter": 0,
+		"mountain": 0, "placed": 0, "sand": 0}
+	for e in Game.props_added.get(island_id, []):
+		var kind: String = e["kind"]
+		var high := float(e["y"]) >= MOUNTAIN_Y + 1
+		if Props.is_tree(kind):
+			m["trees"] += 1
+		elif Props.is_structure(kind) and not Props.KINDS[kind].has("furniture"):
+			m["builds"] += 1
+			if m.has(kind):
+				m[kind] += 1
+			if kind == "garden" or kind == "planter":
+				m["gardens"] += 1
+		else:
+			continue
+		if high:
+			m["mountain"] += 1
+	for key in Game.edits.get(island_id, {}):
+		var b := int(Game.edits[island_id][key])
+		if b == Blocks.AIR or b == Blocks.DEBRIS or b == Blocks.SLUDGE:
+			continue
+		if b in Blocks.FLOWERS or b == Blocks.GRASS or b == Blocks.TALL_GRASS:
+			m["flowers"] += 1
+			continue
+		m["placed"] += 1
+		if b == Blocks.SAND:
+			m["sand"] += 1
+		if int(str(key).get_slice(",", 1)) >= MOUNTAIN_Y:
+			m["mountain"] += 1
+	for k in ["clean_water", "clean_waste", "clean_shore"]:
+		m[k] = Game.get_stat(island_id, k)
+	return m
 
 
 static func _target(part: Dictionary, island_id: String) -> float:
@@ -45,9 +81,10 @@ static func _target(part: Dictionary, island_id: String) -> float:
 
 ## Avancement de chaque composante (0..1).
 static func parts(island_id: String) -> Array[Dictionary]:
+	var m := measures(island_id)
 	var out: Array[Dictionary] = []
 	for p in PARTS:
-		var have := Game.get_stat(island_id, p["stat"])
+		var have := int(m.get(p["measure"], 0))
 		var target := _target(p, island_id)
 		out.append({"key": p["key"], "label": p["label"], "have": have, "target": int(target),
 			"frac": clampf(have / target, 0.0, 1.0), "weight": p["weight"]})
@@ -59,6 +96,20 @@ static func percent(island_id: String) -> int:
 	for p in parts(island_id):
 		v += float(p["weight"]) * float(p["frac"])
 	return clampi(roundi(v), 0, 100)
+
+
+## Paliers de vie de l'île (voir IslandLife : ce qui change à chacun).
+const TIERS := [
+	[0, "Une île silencieuse"],
+	[20, "L'île commence à revivre"],
+	[40, "L'île reprend des couleurs"],
+	[60, "Une île pleine de vie"],
+	[80, "Un petit paradis"],
+	[100, "Un véritable paradis"],
+]
+
+## Vitalité requise pour le n-ième habitant d'une île (puis +8 % par habitant).
+const ARRIVALS := [15, 22, 30, 38, 46, 54, 62, 70, 78, 86, 94]
 
 
 static func tier_index(pct: int) -> int:
@@ -73,15 +124,16 @@ static func tier_name(pct: int) -> String:
 	return TIERS[tier_index(pct)][1]
 
 
-## Score de chaque habitat selon les actions du joueur sur l'île.
+## Score de chaque habitat selon ce qui se trouve sur l'île.
 static func habitat_scores(island_id: String) -> Dictionary:
-	var st := func(k: String) -> float: return float(Game.get_stat(island_id, k))
+	var m := measures(island_id)
+	var f := func(k: String) -> float: return float(m.get(k, 0))
 	return {
-		"forest": st.call("tree") * 3.0,
-		"garden": st.call("bloom") * 0.5 + st.call("build_garden") * 4.0 + st.call("build_planter") * 3.0,
-		"marine": st.call("clean_water") * 1.5 + st.call("clean_shore") * 2.0 + st.call("place_%d" % Blocks.SAND) * 0.5,
-		"mountain": st.call("mountain") * 1.5,
-		"village": st.call("build") * 3.0 + st.call("place") * 0.1 + st.call("build_campfire") * 4.0,
+		"forest": f.call("trees") * 3.0,
+		"garden": f.call("flowers") * 0.5 + f.call("garden") * 4.0 + f.call("planter") * 3.0,
+		"marine": f.call("clean_water") * 1.5 + f.call("clean_shore") * 2.0 + f.call("sand") * 0.5,
+		"mountain": f.call("mountain") * 1.5,
+		"village": f.call("builds") * 3.0 + f.call("placed") * 0.1 + f.call("campfire") * 4.0,
 	}
 
 

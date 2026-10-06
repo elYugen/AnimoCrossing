@@ -105,6 +105,20 @@ static func get_resident(id: String) -> Dictionary:
 	return {}
 
 
+## Le temps que certains adorent : ils restent dehors quand les autres
+## rentrent (ou sortent exprès), et le disent.
+const WEATHER_LOVERS := {
+	"rain": ["iris", "margot", "victor", "capucine", "marin"],
+	"storm": ["yann", "nina"],
+	"snow": ["solene", "alix", "bastien", "elsa"],
+	"fog": ["basile", "coralie", "gaspard"],
+}
+
+
+static func loves_weather(id: String, weather: String) -> bool:
+	return id in (WEATHER_LOVERS.get(weather, []) as Array)
+
+
 const HABITATS := ["forest", "garden", "marine", "mountain", "village"]
 const HABITAT_NAMES := {"forest": "Forêt", "garden": "Jardins", "marine": "Mer & plage", "mountain": "Montagne", "village": "Village"}
 
