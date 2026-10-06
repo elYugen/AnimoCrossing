@@ -29,7 +29,7 @@ func talk(c: Resident) -> void:
 	# 1) Ce qui a changé pour lui : un déménagement, de nouveaux meubles.
 	var react: String = await furniture_reaction(id)
 	if first_today and main.mystery.resident_doubt():
-		# Le mystère de l'épave : une seule fois, un habitant en parle.
+		# Le mystère de la plage : une seule fois, un habitant en parle.
 		lines.append(await line("epave_doute"))
 	elif d.get("moved", false):
 		d["moved"] = false

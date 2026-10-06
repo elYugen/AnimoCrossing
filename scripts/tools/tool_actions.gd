@@ -8,25 +8,26 @@ var main: Main
 var cooldown := 0.0
 
 
-func use_power() -> void:
+## Utilise le pouvoir sélectionné, ou `force` (0 : casser, pour le clic droit).
+func use_power(force := -1) -> void:
 	var aim := main.aim
 	var target := aim.target
 	if target.is_empty() or cooldown > 0.0:
 		return
+	var power: int = main.power if force < 0 else force
 	if main.interior:
-		_use_power_inside()
+		_use_power_inside(power)
 		return
-	var power := main.power
 	if not main.hud.power_unlocked(power):
-		main.deny()
+		main.deny("Ce pouvoir n'est pas encore débloqué.")
 		return
-	cooldown = 0.16
+	cooldown = 0.18
 	var ok := false
 	if target.has("prop"):
 		if power == 0:
 			ok = _cut_prop()
-		else:
-			main.deny()
+		elif power == 1:
+			main.deny("Vise le sol pour poser.")
 		if ok:
 			main.player.face_towards(target["point"])
 			main.player.play_action("break")
@@ -51,7 +52,7 @@ func _break() -> bool:
 	var p: Vector3i = target["pos"]
 	var b: int = target["block"]
 	if p.y <= 0:
-		main.deny()
+		main.deny("Trop profond pour être cassé.")
 		return false
 	world.set_block(p, Blocks.AIR)
 	var above := p + Vector3i.UP
@@ -96,7 +97,7 @@ func _cut_prop() -> bool:
 	var def: Dictionary = Props.KINDS.get(kind, {})
 	var mine := props.key_of(id).begins_with("p:")
 	if main.worksites.is_targeted(props.key_of(id)):
-		main.deny()
+		main.deny("Un chantier de démolition est déjà prévu ici.")
 		return false
 	# Grosses choses (maison, ruines) : ce sont les habitants qui démolissent.
 	if (Props.is_site(kind) and mine) or def.has("demolish"):
@@ -113,7 +114,7 @@ func _cut_prop() -> bool:
 		main.hud.set_block(main.block)
 		return true
 	if not def.get("cut", false):
-		main.deny()
+		main.deny("Mieux vaut laisser ça où c'est.")
 		return false
 	var ab := props.bounds(id)
 	props.remove(id)
@@ -147,14 +148,14 @@ func _place() -> bool:
 	if cur != Blocks.AIR and not Blocks.is_deco(cur):
 		return false
 	if _overlaps_entity(p):
-		main.deny()
+		main.deny("Quelqu'un est dans le passage.")
 		return false
 	# On ne pose que les blocs qu'on possède (cassés ou fabriqués).
 	if not Game.admin and Game.block_count(block) <= 0:
-		main.deny()
+		main.deny("Plus de « %s » : casse-en ou fabrique-en." % Blocks.block_name(block))
 		return false
 	if main.props.any_near(Vector3(p) + Vector3(0.5, 0, 0.5), 0.6):
-		main.deny()
+		main.deny("Pas de place ici.")
 		return false
 	world.set_block(p, block)
 	world.flush()
@@ -211,7 +212,7 @@ func _bloom() -> bool:
 					count += 1
 					main.burst(Vector3(x + 0.5, y + 1.3, z + 0.5), Blocks.main_color(f), 4)
 	if count == 0 and converted == 0:
-		main.deny()
+		main.deny("Il n'y a rien à faire fleurir ici.")
 		return false
 	world.flush()
 	main.burst(Vector3(c) + Vector3(0.5, 1.5, 0.5), Color("ffffff"), 10)
@@ -233,16 +234,16 @@ func _tree() -> bool:
 		g.y -= 1
 		gb = world.get_blockv(g)
 	if not gb in [Blocks.GRASS, Blocks.DIRT, Blocks.SAND, Blocks.SNOW, Blocks.MOSS]:
-		main.deny()
+		main.deny("Les arbres poussent sur l'herbe, la terre, le sable ou la neige.")
 		return false
 	var base := g + Vector3i.UP
 	var bc := Vector3(base) + Vector3(0.5, 0, 0.5)
 	var pp := main.player.global_position
 	if Vector2(bc.x - pp.x, bc.z - pp.z).length() < 1.2 and absf(bc.y - pp.y) < 3.0:
-		main.deny()
+		main.deny("Recule un peu pour laisser pousser l'arbre.")
 		return false
 	if main.props.any_near(bc, 2.0) or world.is_opaque(base.x, base.y, base.z) or world.is_opaque(base.x, base.y + 1, base.z):
-		main.deny()
+		main.deny("Pas assez de place pour un arbre.")
 		return false
 	if Blocks.is_deco(world.get_blockv(base)):
 		world.set_block(base, Blocks.AIR)
@@ -264,12 +265,12 @@ func _tree() -> bool:
 
 # --- À l'intérieur : meubler -------------------------------------------------
 
-func _use_power_inside() -> void:
+func _use_power_inside(power: int) -> void:
 	cooldown = 0.2
 	var aim := main.aim
 	var interior := main.interior
 	var structure := main.structure
-	if main.power == 0 and aim.target.has("furn"):
+	if power == 0 and aim.target.has("furn"):
 		var name := interior.take_furniture(int(aim.target["furn"]))
 		if name != "":
 			Game.add_structure("f_" + name)
@@ -278,7 +279,7 @@ func _use_power_inside() -> void:
 			main.gain(Interior.label_of(name), 1, Color("c99d6c"), aim.target["point"])
 			main.hud.set_block(main.block)
 			Game.save_game()
-	elif main.power == 1 and structure.begins_with("f_") and aim.ghost_shown():
+	elif power == 1 and structure.begins_with("f_") and aim.ghost_shown():
 		var name := structure.trim_prefix("f_")
 		var lp := interior.to_local(aim.ghost_pos)
 		interior.add_furniture(name, lp.x, lp.z, aim.place_rot)
@@ -291,6 +292,10 @@ func _use_power_inside() -> void:
 		if Game.structure_count(structure) <= 0 and not Game.admin:
 			main.select_block(main.block)
 		Game.save_game()
+	elif power == 1 and not structure.begins_with("f_"):
+		main.deny("À l'intérieur, on ne pose que des meubles.")
+	elif power == 1:
+		main.deny("Pas de place ici pour ce meuble.")
 	else:
 		main.deny()
 

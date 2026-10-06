@@ -24,6 +24,8 @@ var _more: Label
 var _title: Label
 var _subtitle: Label
 var _skip_hint: Label
+var _lightning: ColorRect
+var _logo: TextureRect
 var _typing := false
 var _waiting := false
 var _lid := 0.5  # 0.5 = yeux fermés, LETTERBOX = bandes cinéma, 0 = rien
@@ -60,19 +62,20 @@ func _ready() -> void:
 	_bubble = PanelContainer.new()
 	_bubble.custom_minimum_size = Vector2(720, 0)
 	_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_bubble.add_theme_stylebox_override("panel", UIStyle.box(UIStyle.CREAM, 34, UIStyle.BORDER, 4, 30))
+	_bubble.add_theme_stylebox_override("panel", UIStyle.frame(30, 30))
 	col.add_child(_bubble)
 	var vb := VBoxContainer.new()
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_theme_constant_override("separation", 4)
 	_bubble.add_child(vb)
-	_name = UIStyle.label("", 16, UIStyle.TEXT_SOFT)
+	_name = UIStyle.label("", 19, UIStyle.GREEN_DARK)
+	_name.add_theme_font_override("font", UIStyle.title_font())
 	vb.add_child(_name)
 	_text = UIStyle.title("", 28)
 	_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_text.custom_minimum_size = Vector2(660, 44)
 	vb.add_child(_text)
-	_more = UIStyle.label("▶ clic", 14, UIStyle.TEXT_SOFT)
+	_more = UIStyle.label("▶", 18, UIStyle.GREEN_DARK)
 	_more.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	vb.add_child(_more)
 	_bubble_wrap.modulate.a = 0.0
@@ -97,6 +100,28 @@ func _ready() -> void:
 	tc.add_child(_subtitle)
 	_title.modulate.a = 0.0
 	_subtitle.modulate.a = 0.0
+
+	# Logo du jeu (fin de l'intro).
+	var logo_box := CenterContainer.new()
+	logo_box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	logo_box.offset_bottom = -90  # un peu au-dessus du centre
+	logo_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(logo_box)
+	_logo = TextureRect.new()
+	_logo.texture = load("res://assets/logo.png")
+	_logo.custom_minimum_size = Vector2(600, 400)
+	_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_logo.modulate.a = 0.0
+	logo_box.add_child(_logo)
+
+	# Éclairs : par-dessus tout, même les yeux fermés.
+	_lightning = ColorRect.new()
+	_lightning.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_lightning.color = Color(0.85, 0.9, 1.0, 0.0)
+	_lightning.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_lightning)
 
 	_skip_hint = UIStyle.label("Échap : passer", 14, Color(1, 1, 1, 0.35))
 	_skip_hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -254,6 +279,27 @@ func clear_bars(duration := 0.8) -> void:
 ## Remet l'écran au noir (ex. au début de l'intro).
 func black(duration := 0.6) -> void:
 	await _lid_to(0.5, duration)
+
+
+## Un éclair (double, comme un vrai) qui illumine l'écran un instant.
+func lightning(strength := 0.7) -> void:
+	var tw := create_tween()
+	tw.tween_property(_lightning, "color:a", strength, 0.04)
+	tw.tween_property(_lightning, "color:a", 0.05, 0.08)
+	tw.tween_property(_lightning, "color:a", strength * 0.8, 0.05)
+	tw.tween_property(_lightning, "color:a", 0.0, 0.6)
+
+
+## Le logo d'Evergrove apparaît, reste un moment, puis s'efface.
+func show_logo(hold := 3.0) -> void:
+	_logo.scale = Vector2(0.92, 0.92)
+	_logo.pivot_offset = _logo.size * 0.5
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(_logo, "modulate:a", 1.0, 1.4)
+	tw.tween_property(_logo, "scale", Vector2.ONE, 3.0 + hold).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.chain().tween_interval(hold)
+	tw.chain().tween_property(_logo, "modulate:a", 0.0, 1.2)
+	await tw.finished
 
 
 func show_title(title: String, sub: String, hold := 3.0) -> void:

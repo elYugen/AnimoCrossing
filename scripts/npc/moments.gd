@@ -42,7 +42,7 @@ static func add_novelty(key: String, kind: String) -> void:
 
 ## Remplace {joueur} par le nom du joueur.
 static func fill(text: String) -> String:
-	var who := Game.player_name if Game.player_name != "" else "la personne de l'épave"
+	var who := Game.player_name if Game.player_name != "" else "la personne de la plage"
 	return text.replace("{joueur}", who)
 
 

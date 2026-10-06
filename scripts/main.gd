@@ -8,7 +8,7 @@ extends Node3D
 ##             Moments (petites scènes : banc, feu, coucous, découvertes),
 ##             ResidentJobs (« Va nettoyer », « Va planter »)
 ##   story/    StoryDirector (histoire, pensées, découvertes), Expeditions (barque,
-##             coque, phare : découvrir les autres îles), Mystery (l'épave)
+##             coque, phare : découvrir les autres îles), Mystery (la plage)
 ##   world/    DayCycle (nuits, arrivées), Houses, Construction, Wildlife, Gathering
 ##   world/    Scenery (ciel, lumière, océan, nuages), IslandLife (la vitalité se voit),
 ##             WeatherFX (flaques, traces dans la neige, cerf des brumes)
@@ -64,6 +64,8 @@ var rng := RandomNumberGenerator.new()
 var scenery: Scenery
 var _prompt: Label3D
 var _faded := {}  # objets rendus transparents devant la caméra
+var _last_deny := ""
+var _last_deny_at := 0
 
 
 func _ready() -> void:
@@ -364,6 +366,9 @@ func _process(delta: float) -> void:
 		return
 	aim.update_target()
 	aim.update_ghost()
+	# Clic gauche maintenu : on pose des blocs en continu.
+	if is_placing() and structure == "" and aiming and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		tools.use_power()
 
 
 ## Souris capturée en jeu (caméra libre) ; libérée dans les menus,
@@ -543,16 +548,28 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
+		# En mode Poser, la molette choisit l'objet (Ctrl + molette : zoom).
+		var choosing := is_placing() and not mb.ctrl_pressed
 		match mb.button_index:
 			MOUSE_BUTTON_WHEEL_UP:
 				if mb.pressed:
-					rig.zoom(-1.0)
+					if choosing:
+						_cycle_block(-1)
+					else:
+						rig.zoom(-1.0)
 			MOUSE_BUTTON_WHEEL_DOWN:
 				if mb.pressed:
-					rig.zoom(1.0)
+					if choosing:
+						_cycle_block(1)
+					else:
+						rig.zoom(1.0)
 			MOUSE_BUTTON_LEFT:
 				if mb.pressed:
 					tools.use_power()
+			MOUSE_BUTTON_RIGHT:
+				# Clic droit : retirer (casser) sans changer de pouvoir.
+				if mb.pressed and hud.power_unlocked(0):
+					tools.use_power(0)
 
 	for i in 4:
 		if event.is_action_pressed("power_%d" % (i + 1)):
@@ -560,17 +577,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("rotate"):
 		aim.rotate_placement()
 		Audio.play("click", -10.0)
-	if event.is_action_pressed("block_next"):
-		_cycle_block(1)
-	elif event.is_action_pressed("block_prev"):
-		_cycle_block(-1)
+	if event.is_action_pressed("place_category"):
+		_cycle_category()
 	if event.is_action_pressed("interact"):
 		interact()
 
 
 func select_power(i: int) -> void:
 	if not hud.power_unlocked(i):
-		deny()
+		deny("Ce pouvoir n'est pas encore débloqué.")
 		return
 	if power != i:
 		Audio.play("select", -8.0)
@@ -593,17 +608,47 @@ func select_block(id: int) -> void:
 		select_power(1)
 
 
+## Le pouvoir Poser est actif (et débloqué).
+func is_placing() -> bool:
+	return power == 1 and hud.power_unlocked(1)
+
+
+## Catégorie de ce qui est sélectionné : 0 blocs, 1 constructions, 2 meubles.
+func place_category() -> int:
+	if structure.begins_with("f_"):
+		return 2
+	return 1 if structure != "" else 0
+
+
+func _select_placeable(v: Variant) -> void:
+	if v is String:
+		select_structure(v)
+	else:
+		select_block(v)
+	Audio.play("click", -12.0)
+
+
+## Molette : objet suivant / précédent dans la catégorie courante.
 func _cycle_block(step: int) -> void:
-	var list := hud.placeables()
+	var list := hud.placeables_in(place_category())
 	if list.is_empty():
+		_cycle_category()
 		return
 	var cur: Variant = structure if structure != "" else block
 	var i := list.find(cur)
-	var next: Variant = list[posmod(i + step, list.size())]
-	if next is String:
-		select_structure(next)
-	else:
-		select_block(next)
+	_select_placeable(list[posmod(i + step, list.size())])
+
+
+## F : catégorie suivante (seulement celles où il y a quelque chose à poser).
+func _cycle_category() -> void:
+	var cur := place_category()
+	for k in range(1, 4):
+		var cat := (cur + k) % 3
+		var list := hud.placeables_in(cat)
+		if not list.is_empty():
+			_select_placeable(list[0])
+			return
+	deny("Rien d'autre à poser : fabrique des constructions à la table d'artisan.")
 
 
 ## Touche E : saluer un animal, utiliser un objet du décor, ou parler à
@@ -642,9 +687,17 @@ func collect(category: String, id: String) -> void:
 		hud.show_gain("carnet:" + category, "%s : %s" % [CarnetPanel.CATEGORY_NAMES[category], CarnetPanel.entry_name(category, id)], 1, UIStyle.BLUE)
 
 
-## Action impossible : pas de texte à l'écran, juste un petit son.
-func deny() -> void:
+## Action impossible : un petit son, et la raison sous le viseur.
+func deny(reason := "") -> void:
+	# (clic maintenu : pas le même refus en boucle)
+	var now := Time.get_ticks_msec()
+	if reason == _last_deny and now - _last_deny_at < 900:
+		return
+	_last_deny = reason
+	_last_deny_at = now
 	Audio.play("error", -6.0)
+	if reason != "":
+		hud.flash_reason(reason)
 
 
 ## Le joueur récupère quelque chose : « +1 Terre » dans le fil des gains (les

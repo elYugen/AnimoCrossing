@@ -5,12 +5,14 @@ extends RefCounted
 var verts := PackedVector3Array()
 var normals := PackedVector3Array()
 var colors := PackedColorArray()
+## UV : (type de bloc, face) pour le motif dessiné par voxel.gdshader.
+var uvs := PackedVector2Array()
 
 
 ## Ajoute un quad (a, b, c, d forment une boucle). L'ordre est corrigé
 ## automatiquement pour respecter le sens horaire de Godot (face avant).
 func add_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vector3,
-		ca: Color, cb: Color, cc: Color, cd: Color) -> void:
+		ca: Color, cb: Color, cc: Color, cd: Color, uv := Vector2.ZERO) -> void:
 	if (b - a).cross(c - a).dot(n) > 0.0:
 		var t := b
 		b = d
@@ -21,6 +23,7 @@ func add_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vector3,
 	verts.append_array([a, b, c, a, c, d])
 	for i in 6:
 		normals.append(n)
+		uvs.append(uv)
 	colors.append_array([ca, cb, cc, ca, cc, cd])
 
 
@@ -58,6 +61,7 @@ func commit(material: Material = null) -> ArrayMesh:
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	if material:
 		mesh.surface_set_material(0, material)

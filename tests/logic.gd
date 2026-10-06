@@ -38,6 +38,11 @@ func _ready() -> void:
 	main.player.teleport(pk.global_position)
 	await _wait(3)
 	_check(Game.item_count(kind) == 1, "objet ramassé (%s)" % kind)
+	await _wait(3)
+	_check(hud._disc.visible and hud._disc_name.text == Items.name_of(kind) and hud._disc_use.text.begins_with("Sert à"), "première fois : fiche de l'objet (%s)" % hud._disc_use.text)
+	var queued := hud._disc_queue.size()
+	Game.add_item(kind)
+	_check(hud._disc_queue.size() == queued, "pas de fiche la deuxième fois")
 	for k in HUD.TUTO[0]["goals"]:
 		Game.add_item(k, 5)
 	_check(Game.tutorial_step == 0, "il manque encore le point d'eau")
@@ -110,6 +115,34 @@ func _ready() -> void:
 	_check(Game.tutorial_step == 6, "étape poser passée")
 	_check(Game.get_stat("prairie", "place_7") == 3, "stat planches")
 	_check(Game.block_count(Blocks.PLANK) == 1, "planches consommées")
+	# Poser, repensé : molette dans la catégorie, F pour en changer, clic
+	# droit pour retirer, et la raison quand c'est impossible.
+	main.select_power(1)
+	main.select_block(Blocks.PLANK)
+	main._cycle_block(1)
+	_check(main.structure == "" and main.block != Blocks.PLANK and main.place_category() == 0, "molette : bloc suivant (%s)" % Blocks.block_name(main.block))
+	main._cycle_block(-1)
+	_check(main.block == Blocks.PLANK, "molette arrière : retour aux planches")
+	Game.add_structure("f_table")
+	main._cycle_category()
+	_check(main.place_category() != 0, "F : autre catégorie (%s)" % main.structure)
+	Game.add_structure("f_table", -1)
+	main.select_block(Blocks.PLANK)
+	var rx := sp.x - 1
+	var rz := sp.y - 4
+	var ry := w.top_solid_y(rx, rz)
+	_check(w.get_block(rx, ry, rz) == Blocks.PLANK, "(une planche posée à retirer)")
+	_aim(Vector3i(rx, ry, rz), Vector3i.UP)
+	main.tools.use_power(0)
+	_check(w.get_block(rx, ry, rz) != Blocks.PLANK and main.power == 1, "clic droit : planche retirée sans changer de pouvoir")
+	Game.add_block(Blocks.BRICK, 0)
+	main.select_block(Blocks.BRICK)
+	main.block = Blocks.BRICK
+	_aim(Vector3i(rx + 5, w.top_solid_y(rx + 5, rz), rz), Vector3i.UP)
+	main._last_deny = ""
+	main.tools.use_power()
+	_check(hud._reason != null and hud._reason.text.contains("Brique"), "raison sous le viseur : « %s »" % (hud._reason.text if hud._reason else ""))
+	main.select_block(Blocks.PLANK)
 
 	# Fleurir la parcelle
 	main.select_power(2)
@@ -487,6 +520,7 @@ func _ready() -> void:
 		for r in [cr, iris]:
 			r.go(r.global_position, "sit", 30.0)
 			r.state = Resident.State.ACT
+		main.moments._timer = 1.0e9  # (pas de coucou ni d'autre scène pendant la vérification)
 		main.moments.play_scene([cr, iris] as Array[Resident], "banc_vue")
 		await _wait(5)
 		_check(cr._bubble != null and cr._bubble.visible and cr._bubble.text == "D'ici, on voit toute l'île.", "conversation sur le banc (A parle)")
@@ -639,10 +673,10 @@ func _ready() -> void:
 	Game.residents["sylvain"] = {"island": "prairie"}
 	Game.residents["rose"] = {"island": "prairie"}
 	Game.residents["marin"] = {"island": "prairie"}
-	# Le mystère de l'épave, par petites touches.
+	# Le mystère de la plage, par petites touches.
 	auto_close = true
 	var had_doubt := Game.has_flag("mystery_doute")
-	_check(had_doubt or main.mystery.resident_doubt(), "un habitant doute de l'épave (jour %d)" % Game.day)
+	_check(had_doubt or main.mystery.resident_doubt(), "un habitant doute des vieilles caisses (jour %d)" % Game.day)
 	var has_crate := false
 	for id in main.props.items:
 		if main.props.key_of(id) == "g:oldcrate":

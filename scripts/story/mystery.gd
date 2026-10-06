@@ -1,7 +1,7 @@
 class_name Mystery
 extends Node
-## Le mystère de l'épave, raconté par petites touches et jamais expliqué :
-##   1. un habitant : « cette épave n'est peut-être pas la tienne... »
+## Le mystère de la plage, raconté par petites touches et jamais expliqué :
+##   1. un habitant : « ces vieilles caisses ne viennent pas de ton bateau... »
 ##   2. une vieille caisse sur la plage : une carte de l'archipel, très ancienne
 ##   3. parmi les outils rouillés du campement : un vieux carnet
 ##   4. le lendemain, une seule pensée : qu'est-il arrivé à cette personne ?
@@ -18,8 +18,8 @@ const NOTEBOOK := [
 ## Découvertes affichées dans le carnet, dans l'ordre où on les fait.
 const DISCOVERIES := [
 	{"flag": "camp", "title": "Le campement abandonné", "text": "Une tente, un établi, un vieux coffre. Quelqu'un a vécu ici, il y a longtemps."},
-	{"flag": "mystery_doute", "title": "L'épave", "text": "Elle était déjà sur la plage bien avant l'arrivée des habitants. Ce n'est peut-être pas mon bateau..."},
-	{"flag": "mystery_carte", "title": "La carte ancienne", "text": "Trouvée dans une caisse bien plus vieille que l'épave. Toutes les îles y sont dessinées, et une tour est entourée."},
+	{"flag": "mystery_doute", "title": "Les caisses de la plage", "text": "Elles étaient déjà là bien avant l'arrivée des habitants. Elles ne viennent pas de mon bateau..."},
+	{"flag": "mystery_carte", "title": "La carte ancienne", "text": "Trouvée dans une caisse bien plus vieille que mon naufrage. Toutes les îles y sont dessinées, et une tour est entourée."},
 	{"flag": "unlock_corail", "title": "La vieille barque", "text": "Réparée ! Elle m'a menée jusqu'à l'Île Corail."},
 	{"flag": "mystery_carnet", "title": "Le vieux carnet", "text": "Caché parmi les outils rouillés du campement.", "pages": NOTEBOOK},
 	{"flag": "unlock_braise", "title": "Le phare", "text": "Son feu brille de nouveau. Une lueur rouge lui répond, à l'ouest."},

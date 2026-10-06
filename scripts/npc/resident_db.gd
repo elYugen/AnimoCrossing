@@ -92,7 +92,7 @@ static var ALL: Array[Dictionary] = [
 	"lines": ["Du pain tout chaud, ça te dit ?", "Il me faudrait un vrai four...", "Le matin, c'est le meilleur moment de la journée."]},
 	{"id": "felix", "name": "Félix", "habitat": "village", "desc": "Il répare les outils et rêve d'une vraie forge.",
 	"look": {"skin": "b", "head": "p"},
-	"lines": ["Ton outil est vraiment étrange... et fascinant.", "Le feu, le fer et un bon marteau.", "Si tu trouves du métal, apporte-le-moi !"]},
+	"lines": ["Ton Façonneur est vraiment étrange... et fascinant.", "Le feu, le fer et un bon marteau.", "Si tu trouves du métal, apporte-le-moi !"]},
 	{"id": "louise", "name": "Louise", "habitat": "village", "desc": "Elle coud des vêtements pour tous les habitants.",
 	"look": {"skin": "i", "head": "c"},
 	"lines": ["Je t'ai fait une écharpe, tu veux l'essayer ?", "Un bon tissu, ça change tout.", "Ce village a besoin de couleurs !"]},

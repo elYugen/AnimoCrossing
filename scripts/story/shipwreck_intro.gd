@@ -1,9 +1,13 @@
 class_name ShipwreckIntro
 extends RefCounted
-## Introduction d'une nouvelle partie : écran noir et pensées sur fond de
-## vagues, de vent et de bois qui craque, puis réveil sur la plage et
-## caméra qui dévoile l'île. Échap accélère la cinématique.
-
+## Introduction d'une nouvelle partie, en quatre actes (Échap la passe) :
+##   1. La tempête : écran noir, pluie, vent, tonnerre et éclairs ; quelques
+##      pensées, puis le choc... et le silence.
+##   2. Le réveil : à l'aube, les yeux s'ouvrent sur la plage ; la caméra est
+##      au ras du sable, à côté du personnage allongé.
+##   3. Debout : il se relève, se tient la tête, regarde les débris.
+##   4. L'île : la caméra s'élève par-dessus son épaule et la dévoile
+##      (« Une île inconnue »), puis à lui de jouer.
 
 var main: Node
 var story: StoryOverlay
@@ -33,59 +37,84 @@ func run(m: Node, overlay: StoryOverlay) -> void:
 	rig.cinematic = true
 	cam = rig.camera
 
-	# --- Écran noir : les sons arrivent petit à petit, puis les pensées.
+	# --- Acte 1 : la tempête (écran noir).
 	var amb := Ambience.new()
 	main.add_child(amb)
 	amb.fade_to(0.0, 0.0, 0.0, 0.01)
-	await _wait(1.0)
-	amb.fade_to(0.9, 0.0, 0.0, 3.5)
-	await _wait(1.8)
-	amb.fade_to(0.9, 0.55, 0.0, 2.5)
+	await _wait(0.8)
+	amb.rain = 0.0
+	amb.create_tween().tween_property(amb, "rain", 1.0, 2.5)
+	amb.fade_to(1.0, 0.9, 1.0, 2.5)
 	await _wait(1.6)
-	amb.fade_to(0.9, 0.55, 0.8, 1.0)
-	await _wait(1.2)
-	var lines := await Dialogues.fetch(Dialogues.INTRO, "naufrage")
-	await story.play_lines(lines)
+	_storm_flash(amb, 1.0)
+	await _wait(1.0)
+	var storm := await Dialogues.fetch(Dialogues.INTRO, "tempete")
+	# Éclairs pendant que les pensées défilent.
+	var storm_on := [true]
+	_storm_loop(amb, storm_on)
+	await story.play_lines(storm)
+	storm_on[0] = false
 	_speed_up_if_skipped()
-	amb.fade_to(0.8, 0.35, 0.0, 3.0)
+	# Le choc : un grand craquement, puis plus rien.
+	_storm_flash(amb, 1.0)
+	Audio.play("break_wood", 0.0, 0.0, 0.55)
+	await _wait(0.25)
+	amb.fade_to(0.0, 0.0, 0.0, 0.4)
+	amb.create_tween().tween_property(amb, "rain", 0.0, 0.4)
+	await _wait(3.0)
+	# Le silence, puis les vagues reviennent, calmes. Quelques oiseaux.
+	amb.fade_to(0.7, 0.15, 0.0, 4.0)
+	amb.create_tween().tween_property(amb, "birds", 0.25, 6.0)
+	await _wait(2.0)
+	var wake := await Dialogues.fetch(Dialogues.INTRO, "naufrage")
+	await story.play_lines(wake)
+	_speed_up_if_skipped()
 
-	# --- Réveil : vue plongeante sur le visage, les yeux s'ouvrent.
-	var body := pos + out * 0.6 + Vector3.UP * 0.2
-	_place(body + Vector3.UP * 2.6 + inland * 0.2, body, out)
-	var open := _tween_to(body + Vector3.UP * 3.6 + side * 0.9, body, 5.0, out)
+	# --- Acte 2 : le réveil. Caméra au ras du sable, à côté du visage.
+	var head := pos + out * 0.55 + Vector3.UP * 0.25
+	_place(head + side * 1.1 + inland * 0.4 + Vector3.UP * 0.25, head + inland * 0.6 + Vector3.UP * 0.15)
+	var drift := _tween_to(head + side * 1.6 + inland * 0.9 + Vector3.UP * 0.6, head + inland * 0.3, 6.0)
 	await story.open_eyes()
 	_speed_up_if_skipped()
-	if open.is_running():
-		await open.finished
+	var get_up := await Dialogues.fetch(Dialogues.INTRO, "reveil_plage")
+	await story.play_lines(get_up)
+	if drift.is_running():
+		await drift.finished
 
-	# --- Il se relève.
-	var stand_cam := pos + out * 3.2 + side * 1.1 + Vector3.UP * 1.2
-	var stand_look := pos + Vector3.UP * 0.9 + inland * 1.5
-	var move := _tween_to(stand_cam, stand_look, 1.8)
-	await player.stand_up(1.4)
+	# --- Acte 3 : il se relève et regarde autour de lui.
+	var stand_cam := pos + out * 3.4 + side * 1.4 + Vector3.UP * 1.3
+	var stand_look := pos + Vector3.UP * 0.9 + inland * 1.2
+	var move := _tween_to(stand_cam, stand_look, 2.0)
+	await player.stand_up(1.5)
 	if move.is_running():
 		await move.finished
-	await _wait(0.3)
-	player.play_anim("emote-no")
-	await _wait(0.9)
-	await player.turn_to(atan2(inland.x + side.x * 0.8, inland.z + side.z * 0.8), 0.7)
+	await _wait(0.2)
+	player.play_anim("emote-no")  # il se tient la tête, encore sonné
+	await _wait(1.0)
+	await player.turn_to(atan2(side.x - out.x * 0.3, side.z - out.z * 0.3), 0.8)
+	await _wait(0.5)
+	await player.turn_to(atan2(-side.x - out.x * 0.3, -side.z - out.z * 0.3), 1.0)
 	await _wait(0.4)
-	await player.turn_to(atan2(inland.x - side.x * 0.8, inland.z - side.z * 0.8), 0.9)
-	await _wait(0.3)
-	await player.turn_to(atan2(inland.x, inland.z), 0.6)
+	var look := await Dialogues.fetch(Dialogues.INTRO, "debout")
+	await story.play_lines(look)
+	await player.turn_to(atan2(inland.x, inland.z), 0.7)
 
-	# --- La caméra s'élève au-dessus des vagues et dévoile l'île.
+	# --- Acte 4 : la caméra s'élève par-dessus son épaule et dévoile l'île.
 	var peak := IslandGenerator.PRAIRIE_PEAK
-	var mountain := Vector3(peak.x, 22.0, peak.y)
-	var crane := pos + out * 15.0 - side * 5.0 + Vector3.UP * 17.0
-	var vista := pos + inland * 45.0 + Vector3.UP * 6.0
+	var mountain := Vector3(peak.x, 24.0, peak.y)
+	var over := pos + out * 2.2 + side * 0.8 + Vector3.UP * 2.0
+	await _move(over, pos + inland * 12.0 + Vector3.UP * 2.0, 2.4)
+	var crane := pos + out * 6.0 + Vector3.UP * 16.0
+	var vista := pos + inland * 60.0 + Vector3.UP * 4.0
+	var reveal := _tween_to(crane, vista.lerp(mountain, 0.35), 9.0, Vector3.UP, 3.0)
+	main.get_tree().create_timer(2.2).timeout.connect(func():
+		if not story.skipped:
+			Audio.play("jingle_island", -6.0, 0.0))
 	main.get_tree().create_timer(2.8).timeout.connect(func():
 		if not story.skipped:
 			story.show_title("Une île inconnue", "Quelque part au milieu de l'océan...", 3.2))
-	await _move(crane, vista, 8.0, Vector3.UP, 4.0)
-	# Panoramique lent vers la montagne et les ruines englouties.
-	await _move(crane + side * 12.0 + Vector3.UP * 3.0, vista.lerp(mountain, 0.6), 5.0)
-	await _move(pos + out * 9.0 + side * 16.0 + Vector3.UP * 7.0, pos + out * 6.0 - side * 4.0, 5.0)
+	if reveal.is_running():
+		await reveal.finished
 
 	# --- Retour derrière le joueur : à lui de jouer.
 	main.gameplay_camera(atan2(out.x, out.z))
@@ -99,6 +128,22 @@ func run(m: Node, overlay: StoryOverlay) -> void:
 	main.get_tree().create_timer(1.2).timeout.connect(story.queue_free)
 	amb.fade_out_and_free(10.0)
 	Audio.play_music("prairie")
+
+
+## Un éclair, et le tonnerre qui suit.
+func _storm_flash(amb: Ambience, strength: float) -> void:
+	story.lightning(0.55 * strength)
+	main.get_tree().create_timer(randf_range(0.2, 0.6)).timeout.connect(func():
+		if is_instance_valid(amb):
+			amb.thunder(strength))
+
+
+## Éclairs réguliers tant que `on[0]` est vrai.
+func _storm_loop(amb: Ambience, on: Array) -> void:
+	while on[0] and not story.skipped:
+		await main.get_tree().create_timer(randf_range(2.0, 3.5)).timeout
+		if on[0] and not story.skipped:
+			_storm_flash(amb, randf_range(0.5, 0.9))
 
 
 func _speed_up_if_skipped() -> void:

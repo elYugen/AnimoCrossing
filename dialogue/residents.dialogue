@@ -192,7 +192,7 @@ A: Et un jour, j'aurai raison !
 => END
 
 ~ feu_histoire
-A: Vous connaissez l'histoire de l'épave sur la plage ?
+A: Vous connaissez l'histoire des vieilles caisses sur la plage ?
 B: On dit qu'elle était là bien avant nous...
 C: Arrête, tu vas me faire peur !
 => END
@@ -269,9 +269,9 @@ C: Garde-m'en un !
 % Tout est déjà en ordre dans le coin !
 => END
 
-# --- Le mystère de l'épave (Mystery)
+# --- Le mystère des vieilles caisses (Mystery)
 
 ~ epave_doute
-Tu sais... cette épave, sur la plage... elle n'est peut-être pas la tienne.
-Elle était déjà là bien avant que j'arrive sur l'île.
+Tu sais... les vieilles caisses, sur la plage... elles ne viennent pas de ton bateau.
+Elles étaient déjà là bien avant que j'arrive sur l'île.
 => END

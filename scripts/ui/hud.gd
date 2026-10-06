@@ -38,6 +38,12 @@ var _power_slots: Array[PanelContainer] = []
 var _block_bar: HBoxContainer
 var _block_name: Label
 var _block_wrap: VBoxContainer
+var _block_tabs: HBoxContainer
+var _reason: Label  # pourquoi on ne peut pas (sous le viseur)
+## Catégories de la barre de pose.
+const PLACE_TABS := ["Blocs", "Constructions", "Meubles"]
+## Nombre d'objets visibles à la fois dans la barre (autour de celui choisi).
+const PLACE_WINDOW := 9
 var _toasts: VBoxContainer
 var _dialog: PanelContainer
 var _dialog_name: Label
@@ -49,9 +55,17 @@ var _tuto_text: Label
 var _tuto_button: Button
 var _tuto_progress: Label
 var _tuto_title: Label
-var _power_bar: HBoxContainer
+var _power_bar: Control
 var _inv_labels := {}
 var _item_popup: Control
+## Fiche de découverte (premier objet de chaque sorte) et sa file d'attente.
+var _disc: Control
+var _disc_icon: PowerIcon
+var _disc_name: Label
+var _disc_desc: Label
+var _disc_use: Label
+var _disc_queue: Array[String] = []
+var _disc_timer := 0.0
 var _item_title: Label
 var _item_sub: Label
 var _item_timer := 0.0
@@ -62,7 +76,6 @@ var _popup_name: Label
 var _popup_timer := 0.0
 var _fade: ColorRect
 var _pause: Control
-var _skin_label: Label
 var _hint_label: Label
 var _admin_label: Label
 var _admin_button: Button
@@ -113,6 +126,7 @@ func _ready() -> void:
 	_build_tutorial()
 	_build_popup()
 	_build_item_popup()
+	_build_discovery()
 	_build_pause()
 	_fade = ColorRect.new()
 	_fade.color = Color("fff8ec")
@@ -189,24 +203,24 @@ func _build_objectives() -> void:
 	var mc := _anchored(Control.PRESET_TOP_RIGHT, Vector2(18, 16))
 	mc.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UIStyle.box(Color(1, 0.98, 0.94, 0.85), 16, UIStyle.BORDER, 2, 12))
+	var st := UIStyle.frame(20, 16)
+	st.bg_color = Color(UIStyle.CREAM, 0.93)
+	p.add_theme_stylebox_override("panel", st)
 	mc.add_child(p)
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 2)
+	vb.add_theme_constant_override("separation", 4)
 	p.add_child(vb)
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 10)
-	vb.add_child(head)
-	_vit_tier = UIStyle.label("", 15, UIStyle.TEXT_SOFT)
-	_vit_tier.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	head.add_child(_vit_tier)
-	_vit_pct = UIStyle.label("", 19, UIStyle.GREEN_DARK)
-	head.add_child(_vit_pct)
+	# Nom de l'île, puis le palier de vie et sa jauge.
+	_vit_tier = UIStyle.label("", 21, UIStyle.FRAME)
+	_vit_tier.add_theme_font_override("font", UIStyle.title_font())
+	vb.add_child(_vit_tier)
+	_vit_pct = UIStyle.label("", 15, UIStyle.GREEN_DARK)
+	vb.add_child(_vit_pct)
 	_vit_bar = ProgressBar.new()
-	_vit_bar.custom_minimum_size = Vector2(170, 8)
+	_vit_bar.custom_minimum_size = Vector2(220, 12)
 	_vit_bar.show_percentage = false
 	vb.add_child(_vit_bar)
-	_clock = UIStyle.label("", 13, UIStyle.TEXT_SOFT)
+	_clock = UIStyle.label("", 14, UIStyle.TEXT_SOFT)
 	vb.add_child(_clock)
 	_obj_list = VBoxContainer.new()
 	_vit_next = Label.new()
@@ -226,27 +240,52 @@ func _build_hotbar() -> void:
 	_block_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_block_wrap.add_theme_constant_override("separation", 4)
 	vb.add_child(_block_wrap)
-	_block_name = UIStyle.title("", 17)
-	_block_name.add_theme_color_override("font_outline_color", Color.WHITE)
-	_block_name.add_theme_constant_override("outline_size", 6)
-	_block_wrap.add_child(_block_name)
 	var bp := PanelContainer.new()
 	bp.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	bp.add_theme_stylebox_override("panel", UIStyle.box(UIStyle.PANEL, 16, UIStyle.BORDER, 3, 8))
+	var bst := UIStyle.frame(22, 12)
+	bst.bg_color = Color(UIStyle.CREAM, 0.94)
+	bp.add_theme_stylebox_override("panel", bst)
 	_block_wrap.add_child(bp)
+	var bvb := VBoxContainer.new()
+	bvb.add_theme_constant_override("separation", 6)
+	bp.add_child(bvb)
+	# Onglets (F) et nom de l'objet choisi.
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 6)
+	bvb.add_child(top)
+	_block_tabs = HBoxContainer.new()
+	_block_tabs.add_theme_constant_override("separation", 4)
+	top.add_child(_block_tabs)
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gap.custom_minimum_size.x = 16
+	top.add_child(gap)
+	_block_name = UIStyle.label("", 18, UIStyle.FRAME)
+	_block_name.add_theme_font_override("font", UIStyle.title_font())
+	top.add_child(_block_name)
 	_block_bar = HBoxContainer.new()
-	_block_bar.add_theme_constant_override("separation", 4)
-	bp.add_child(_block_bar)
+	_block_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	_block_bar.add_theme_constant_override("separation", 6)
+	bvb.add_child(_block_bar)
+	var keys := UIStyle.label("Molette : choisir   ·   F : catégorie   ·   R : tourner   ·   Clic droit : retirer", 13, UIStyle.TEXT_SOFT)
+	keys.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bvb.add_child(keys)
 
+	var tray := PanelContainer.new()
+	tray.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var tst := UIStyle.frame(26, 10)
+	tst.bg_color = Color(UIStyle.CREAM, 0.9)
+	tray.add_theme_stylebox_override("panel", tst)
+	vb.add_child(tray)
 	var hb := HBoxContainer.new()
 	hb.alignment = BoxContainer.ALIGNMENT_CENTER
 	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hb.add_theme_constant_override("separation", 10)
-	vb.add_child(hb)
-	_power_bar = hb
+	hb.add_theme_constant_override("separation", 8)
+	tray.add_child(hb)
+	_power_bar = tray
 	for i in 4:
 		var slot := PanelContainer.new()
-		slot.custom_minimum_size = Vector2(88, 96)
+		slot.custom_minimum_size = Vector2(92, 96)
 		slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		var idx := i
 		slot.gui_input.connect(func(ev: InputEvent):
@@ -261,7 +300,7 @@ func _build_hotbar() -> void:
 		icon.custom_minimum_size = Vector2(56, 52)
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		svb.add_child(icon)
-		var nl := UIStyle.title("%d" % (i + 1), 14)
+		var nl := UIStyle.title("%d" % (i + 1), 15)
 		nl.name = "Name"
 		svb.add_child(nl)
 		hb.add_child(slot)
@@ -309,7 +348,7 @@ func _build_dialog() -> void:
 	mc.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_dialog = PanelContainer.new()
 	_dialog.custom_minimum_size = Vector2(640, 120)
-	_dialog.add_theme_stylebox_override("panel", UIStyle.box(UIStyle.PANEL, 24, UIStyle.GREEN, 4, 20))
+	_dialog.add_theme_stylebox_override("panel", UIStyle.frame(26, 24))
 	_dialog.visible = false
 	_dialog.gui_input.connect(func(ev: InputEvent):
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
@@ -319,14 +358,19 @@ func _build_dialog() -> void:
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_dialog.add_child(vb)
 	_dialog_name = UIStyle.label("", 22, UIStyle.GREEN_DARK)
+	_dialog_name.add_theme_font_override("font", UIStyle.title_font())
 	vb.add_child(_dialog_name)
-	_dialog_text = UIStyle.label("", 19)
+	_dialog_text = UIStyle.label("", 20)
 	_dialog_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_dialog_text.custom_minimum_size.x = 600
 	vb.add_child(_dialog_text)
-	var more := UIStyle.label("▶ clic / E", 13, UIStyle.TEXT_SOFT)
+	var more := UIStyle.label("▶", 18, UIStyle.GREEN_DARK)
 	more.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	vb.add_child(more)
+	# La flèche sautille doucement.
+	var bounce := more.create_tween().set_loops()
+	bounce.tween_property(more, "modulate:a", 0.45, 0.5).set_trans(Tween.TRANS_SINE)
+	bounce.tween_property(more, "modulate:a", 1.0, 0.5).set_trans(Tween.TRANS_SINE)
 
 
 func _build_tutorial() -> void:
@@ -366,7 +410,7 @@ func _build_popup() -> void:
 	_popup.visible = false
 	_root.add_child(_popup)
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UIStyle.box(UIStyle.PANEL, 28, UIStyle.STAR, 5, 24))
+	p.add_theme_stylebox_override("panel", UIStyle.box(UIStyle.PANEL, 30, UIStyle.STAR.darkened(0.1), 5, 26))
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_popup.add_child(p)
 	var vb := VBoxContainer.new()
@@ -381,6 +425,84 @@ func _build_popup() -> void:
 	vb.add_child(_popup_name)
 
 
+## Fiche de découverte : à quoi sert l'objet qu'on vient d'obtenir pour la
+## première fois. Ne bloque pas le jeu ; se ferme seule (ou au clic).
+func _build_discovery() -> void:
+	var mc := _anchored(Control.PRESET_CENTER_TOP, Vector2(0, 150))
+	mc.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_disc = PanelContainer.new()
+	_disc.add_theme_stylebox_override("panel", UIStyle.frame(24, 20))
+	_disc.custom_minimum_size = Vector2(520, 0)
+	_disc.visible = false
+	_disc.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed:
+			_disc_timer = 0.0)
+	mc.add_child(_disc)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 18)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_disc.add_child(hb)
+	_disc_icon = PowerIcon.new()
+	_disc_icon.is_block = true
+	_disc_icon.custom_minimum_size = Vector2(84, 84)
+	_disc_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(_disc_icon)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 4)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(vb)
+	var tag := UIStyle.label("NOUVEL OBJET", 13, UIStyle.GREEN_DARK)
+	tag.add_theme_font_override("font", UIStyle.title_font())
+	vb.add_child(tag)
+	_disc_name = UIStyle.label("", 28, UIStyle.FRAME)
+	_disc_name.add_theme_font_override("font", UIStyle.title_font())
+	vb.add_child(_disc_name)
+	_disc_desc = UIStyle.label("", 17)
+	_disc_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_disc_desc.custom_minimum_size.x = 380
+	vb.add_child(_disc_desc)
+	_disc_use = UIStyle.label("", 16, UIStyle.GREEN_DARK)
+	_disc_use.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_disc_use.custom_minimum_size.x = 380
+	vb.add_child(_disc_use)
+	Game.first_obtained.connect(func(key: String): _disc_queue.append(key))
+
+
+func _show_discovery(key: String) -> void:
+	var d := Items.discovery(key)
+	_disc_icon.block_color = d["color"]
+	_disc_icon.queue_redraw()
+	_disc_name.text = d["name"]
+	_disc_desc.text = d["desc"]
+	_disc_use.text = "Sert à : %s" % d["use"]
+	_disc_use.visible = d["use"] != ""
+	_disc.visible = true
+	_disc.modulate.a = 0.0
+	_disc.pivot_offset = _disc.size * 0.5
+	_disc.scale = Vector2(0.9, 0.9)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(_disc, "modulate:a", 1.0, 0.25)
+	tw.tween_property(_disc, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_disc_timer = 6.0
+	Audio.play("jingle_common", -8.0, 0.0)
+
+
+func _update_discovery(delta: float) -> void:
+	if _disc.visible:
+		_disc_timer -= delta
+		if _disc_timer <= 0.0:
+			_disc.modulate.a -= delta * 3.0
+			if _disc.modulate.a <= 0.0:
+				_disc.visible = false
+		return
+	# Pas pendant une cinématique, au menu, ou par-dessus une autre annonce.
+	if _disc_queue.is_empty() or not visible or main == null or main.in_title or main.cinematic \
+			or _item_popup.visible or _popup.visible:
+		return
+	_show_discovery(_disc_queue.pop_front())
+
+
 func _build_item_popup() -> void:
 	_item_popup = CenterContainer.new()
 	_item_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -388,7 +510,7 @@ func _build_item_popup() -> void:
 	_item_popup.visible = false
 	_root.add_child(_item_popup)
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UIStyle.box(UIStyle.PANEL, 28, UIStyle.STAR, 5, 26))
+	p.add_theme_stylebox_override("panel", UIStyle.box(UIStyle.PANEL, 30, UIStyle.STAR.darkened(0.1), 5, 28))
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_item_popup.add_child(p)
 	var vb := VBoxContainer.new()
@@ -433,18 +555,6 @@ func _build_pause() -> void:
 	var b := UIStyle.colored_button("Reprendre", UIStyle.GREEN, 20)
 	b.pressed.connect(func(): _pause.visible = false)
 	body.add_child(b)
-	var skin_row := HBoxContainer.new()
-	skin_row.add_theme_constant_override("separation", 8)
-	body.add_child(skin_row)
-	var prev := UIStyle.button("◀", 18)
-	skin_row.add_child(prev)
-	_skin_label = UIStyle.title("", 18)
-	_skin_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	skin_row.add_child(_skin_label)
-	var nxt := UIStyle.button("▶", 18)
-	skin_row.add_child(nxt)
-	prev.pressed.connect(func(): _change_skin(-1))
-	nxt.pressed.connect(func(): _change_skin(1))
 	body.add_child(_volume_row("Musique", Game.music_volume, func(v):
 		Game.music_volume = v
 		Audio.apply_volumes()))
@@ -513,7 +623,6 @@ func _build_pause() -> void:
 		Game.save_game()
 		get_tree().quit())
 	body.add_child(q)
-	body.add_child(UIStyle.label("Personnages voxel : Kenney (CC0)", 12, UIStyle.TEXT_SOFT))
 	refresh_admin()
 
 
@@ -549,12 +658,6 @@ func _volume_row(text: String, value: float, on_change: Callable) -> HBoxContain
 	sl.drag_ended.connect(func(_c): on_change.call(sl.value))
 	row.add_child(sl)
 	return row
-
-
-func _change_skin(step: int) -> void:
-	Game.player_skin = Player.next_skin(Game.player_skin, step)
-	_skin_label.text = "Tenue : %s" % Game.player_skin.to_upper()
-	main.player.set_skin(Game.player_skin, Game.player_head)
 
 
 # --- Rafraîchissement ----------------------------------------------------
@@ -601,71 +704,112 @@ func _refresh_powers() -> void:
 		var unlocked := power_unlocked(i)
 		var col: Color = UIStyle.POWER_COLORS[i]
 		var sel := i == _power
-		var st := UIStyle.box(col.lightened(0.75) if sel else UIStyle.PANEL, 18, col if sel else UIStyle.BORDER, 5 if sel else 3, 6)
+		var st := UIStyle.box(col.lightened(0.72) if sel else UIStyle.CREAM, 18, col.darkened(0.1) if sel else UIStyle.BORDER, 4 if sel else 2, 6)
+		st.shadow_size = 6 if sel else 0
+		st.border_width_bottom = 7 if sel else 4  # (relief)
 		slot.add_theme_stylebox_override("panel", st)
 		slot.modulate = Color(1, 1, 1, 1) if unlocked else Color(1, 1, 1, 0.4)
 		slot.scale = Vector2.ONE
 		var nl := slot.find_child("Name", true, false) as Label
-		nl.text = "%d" % (i + 1)
-	_block_wrap.visible = _power == 1 and power_unlocked(1) and not placeables().is_empty()
+		nl.text = "%d · %s" % [i + 1, UIStyle.POWER_NAMES[i]]
+		nl.add_theme_color_override("font_color", col.darkened(0.35) if sel else UIStyle.TEXT_SOFT)
+	_block_wrap.visible = _power == 1 and power_unlocked(1)
 	# Pas d'outil, pas de barre de pouvoirs.
 	_power_bar.visible = power_unlocked(0)
 
 
 ## Ce qu'on peut poser : ids de blocs (int) puis constructions (String).
+## Tout ce qu'on peut poser ici (dedans : les meubles seulement).
 func placeables() -> Array:
 	var out: Array = []
-	if main and main.interior:
-		# Dans une maison : les meubles.
-		for r in Crafting.RECIPES:
-			if r.has("furniture"):
-				var fk: String = "f_" + r["furniture"]
-				if Game.admin or Game.structure_count(fk) > 0:
-					out.append(fk)
+	for cat in 3:
+		out.append_array(placeables_in(cat))
+	return out
+
+
+## Ce qu'on peut poser dans une catégorie : 0 blocs, 1 constructions,
+## 2 meubles. Dans une maison, seuls les meubles.
+func placeables_in(cat: int) -> Array:
+	var out: Array = []
+	var inside: bool = main != null and main.interior != null
+	if inside and cat != 2:
 		return out
-	# Dehors : les blocs, puis les constructions et les meubles fabriqués.
-	for id in Game.available_blocks():
-		out.append(id)
+	if cat == 0:
+		for id in Game.available_blocks():
+			out.append(id)
+		return out
 	for r in Crafting.RECIPES:
-		var k: String = r.get("structure", "")
-		if r.has("furniture"):
+		var k: String = ""
+		if cat == 1:
+			k = r.get("structure", "")
+		elif r.has("furniture"):
 			k = "f_" + r["furniture"]
 		if k != "" and not k in out and (Game.admin or Game.structure_count(k) > 0):
 			out.append(k)
 	return out
 
 
+func _place_count(entry: Variant) -> int:
+	return Game.structure_count(entry) if entry is String else Game.block_count(entry)
+
+
+func _place_name(entry: Variant) -> String:
+	return Crafting.structure_name(entry) if entry is String else Blocks.block_name(entry)
+
+
 func _refresh_blocks() -> void:
 	for c in _block_bar.get_children():
 		c.queue_free()
-	for entry in placeables():
+	for c in _block_tabs.get_children():
+		c.queue_free()
+	var cat: int = main.place_category() if main else 0
+	# Onglets : la catégorie courante en vert, les vides en grisé.
+	for i in PLACE_TABS.size():
+		var n := placeables_in(i).size()
+		var t := UIStyle.tag("%s %d" % [PLACE_TABS[i], n], UIStyle.FRAME if i == cat else Color("c9b48c"), 14)
+		t.modulate.a = 1.0 if n > 0 else 0.45
+		_block_tabs.add_child(t)
+	var list := placeables_in(cat)
+	var cur: Variant = _structure if _structure != "" else _block
+	var sel_i := maxi(0, list.find(cur))
+	# Une fenêtre de quelques objets autour de celui choisi.
+	var start := clampi(sel_i - PLACE_WINDOW / 2, 0, maxi(0, list.size() - PLACE_WINDOW))
+	for i in range(start, mini(list.size(), start + PLACE_WINDOW)):
+		var entry: Variant = list[i]
+		var sel := i == sel_i
 		var slot := PanelContainer.new()
-		slot.custom_minimum_size = Vector2(52, 52)
-		var sel: bool = (entry is String and entry == _structure) or (entry is int and _structure == "" and entry == _block)
-		slot.add_theme_stylebox_override("panel", UIStyle.box(Color("fffdf6") if sel else Color(0, 0, 0, 0), 10, UIStyle.POWER_COLORS[1] if sel else Color(0, 0, 0, 0), 3, 2))
+		slot.custom_minimum_size = Vector2(60, 60) if sel else Vector2(50, 50)
+		slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var st := UIStyle.box(Color.WHITE if sel else Color(1, 1, 1, 0.55), 12, UIStyle.POWER_COLORS[1] if sel else UIStyle.BORDER, 4 if sel else 2, 3)
+		st.shadow_size = 4 if sel else 0
+		slot.add_theme_stylebox_override("panel", st)
 		slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		var count := 0
+		slot.tooltip_text = _place_name(entry)
 		if entry is String:
-			slot.tooltip_text = Crafting.structure_name(entry)
 			var tr := TextureRect.new()
 			tr.texture = Thumbs.of(entry)
 			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			slot.add_child(tr)
-			count = Game.structure_count(entry)
 		else:
-			slot.tooltip_text = Blocks.block_name(entry)
+			# (icône un peu en retrait : la quantité s'affiche en bas à droite)
+			var pad := MarginContainer.new()
+			pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			for side in ["left", "top"]:
+				pad.add_theme_constant_override("margin_" + side, 2)
+			for side in ["right", "bottom"]:
+				pad.add_theme_constant_override("margin_" + side, 12)
 			var icon := PowerIcon.new()
 			icon.is_block = true
 			icon.block_color = Blocks.main_color(entry)
 			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			slot.add_child(icon)
-			count = Game.block_count(entry)
+			pad.add_child(icon)
+			slot.add_child(pad)
 		if not Game.admin:
-			var cnt := UIStyle.label(str(count), 13, UIStyle.TEXT)
+			var cnt := UIStyle.label(str(_place_count(entry)), 13, UIStyle.TEXT)
 			cnt.add_theme_color_override("font_outline_color", Color.WHITE)
-			cnt.add_theme_constant_override("outline_size", 5)
+			cnt.add_theme_constant_override("outline_size", 6)
 			cnt.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			cnt.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 			cnt.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -678,7 +822,19 @@ func _refresh_blocks() -> void:
 				else:
 					block_selected.emit(e))
 		_block_bar.add_child(slot)
-	_block_name.visible = false
+	# Petites flèches si d'autres objets sont cachés de chaque côté.
+	if start > 0:
+		_block_bar.add_child(UIStyle.label("‹", 26, UIStyle.TEXT_SOFT))
+		_block_bar.move_child(_block_bar.get_child(_block_bar.get_child_count() - 1), 0)
+	if start + PLACE_WINDOW < list.size():
+		_block_bar.add_child(UIStyle.label("›", 26, UIStyle.TEXT_SOFT))
+	if list.is_empty():
+		_block_name.text = ""
+		_block_bar.add_child(UIStyle.label("Rien à poser ici : fabrique-en à la table d'artisan.", 15, UIStyle.TEXT_SOFT))
+	else:
+		var e2: Variant = list[sel_i]
+		_block_name.text = _place_name(e2) + ("" if Game.admin else "  ·  %d" % _place_count(e2))
+	_block_name.visible = true
 
 
 func set_structure(kind: String) -> void:
@@ -821,6 +977,25 @@ func advance_dialog() -> void:
 	_dialog_text.text = _dialog_lines.pop_front()
 
 
+## Pourquoi l'action est impossible : un petit mot sous le viseur.
+func flash_reason(text: String) -> void:
+	if _reason == null:
+		_reason = UIStyle.label("", 17, UIStyle.CREAM)
+		_reason.add_theme_color_override("font_outline_color", Color(0.15, 0.1, 0.05, 0.85))
+		_reason.add_theme_constant_override("outline_size", 7)
+		_reason.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_reason.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		_reason.custom_minimum_size = Vector2(700, 0)
+		_reason.position = Vector2(-350, 34)
+		_reason.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_root.add_child(_reason)
+	_reason.text = text
+	_reason.modulate.a = 1.0
+	var tw := _reason.create_tween()
+	tw.tween_interval(1.4)
+	tw.tween_property(_reason, "modulate:a", 0.0, 0.5)
+
+
 func set_crosshair(v: bool, col: Color) -> void:
 	_crosshair.visible = v
 	if _crosshair.color != col:
@@ -932,7 +1107,7 @@ func _on_crafted(r: Dictionary) -> void:
 		var k: String = "f_" + r["furniture"] if r.has("furniture") else r["structure"]
 		show_gain(k, Crafting.structure_name(k), n, UIStyle.POWER_COLORS[1])
 		structure_selected.emit(k)
-		toast("%s prêt à poser : clique pour le placer (R pour tourner)" % Crafting.structure_name(k), UIStyle.GREEN_DARK)
+		toast("%s prêt à poser : clic gauche pour le placer, R pour tourner" % Crafting.structure_name(k), UIStyle.GREEN_DARK)
 
 
 func open_crafting(at_table: bool) -> void:
@@ -958,7 +1133,6 @@ func back() -> void:
 		close_panel()
 	else:
 		_pause.visible = not _pause.visible
-		_skin_label.text = "Tenue : %s" % Game.player_skin.to_upper()
 
 
 # --- Tutoriel ------------------------------------------------------------
@@ -1066,6 +1240,7 @@ func jump_to_step(step: int) -> void:
 func _process(delta: float) -> void:
 	if main and main.sky and _clock:
 		_clock.text = main.sky.clock_text()
+	_update_discovery(delta)
 	if _item_popup.visible:
 		_item_timer -= delta
 		if _item_timer <= 0.0:

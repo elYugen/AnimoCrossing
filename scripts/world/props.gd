@@ -1,6 +1,6 @@
 class_name Props
 extends Node3D
-## Objets 3D posés sur l'île voxel (arbres, épave, ruines, feux de camp,
+## Objets 3D posés sur l'île voxel (arbres, ruines, feux de camp,
 ## potagers...) : modèles Kenney (CC0). Les sols restent en voxels.
 ## Les objets générés sont recréés à chaque chargement de l'île (clé "g:...") ;
 ## ceux ajoutés ou retirés par le joueur sont sauvegardés dans Game.

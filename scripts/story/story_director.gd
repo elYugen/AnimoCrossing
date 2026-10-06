@@ -129,7 +129,7 @@ func open_chest() -> void:
 	await get_tree().create_timer(0.8).timeout
 	Audio.play("jingle_rare", -4.0, 0.0)
 	main.burst(camp_props.chest.global_position + Vector3(0, 0.7, 0), Color("ffd84a"), 24)
-	hud.show_item_popup("Outil de destruction/construction universel obtenu !", "Il peut détruire et construire presque n'importe quoi.")
+	hud.show_item_popup("Tu as trouvé le Façonneur !", "Casser, poser, faire fleurir, planter : il façonne l'île.")
 	Game.set_flag("camp")
 	Game.set_flag("chest")
 	hud.jump_to_step(3)

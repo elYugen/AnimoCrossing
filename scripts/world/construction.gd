@@ -45,10 +45,10 @@ func place_structure() -> bool:
 	var aim := main.aim
 	var kind := main.structure
 	if not Game.admin and Game.structure_count(kind) <= 0:
-		main.deny()
+		main.deny("Il n'en reste plus : fabrique-en à la table d'artisan.")
 		return false
 	if not aim.ghost_shown():
-		main.deny()
+		main.deny("Pas de place ici : terrain trop pentu ou encombré.")
 		return false
 	var world := main.world
 	var pos := aim.ghost_pos

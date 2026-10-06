@@ -5,7 +5,8 @@ extends CanvasLayer
 
 signal play_requested(new_game: bool)
 
-const CREDITS := "Personnages voxel : Kenney — Blocky Characters (CC0)\nModèles 3D et ciel : Kenney — Survival, Pirate, Fantasy Town, Holiday, Nature, Furniture Kits, City Kit Suburban, Cube Pets, Skyboxes (CC0)\nBruitages : Kenney — Impact, Interface, RPG, Casino, Jingles (CC0)\n\nMusiques (OpenGameArt, CC0) :\n« Hush Hamlet » — Zane Little Music\n« Bossa Town » — KarateStudios\n« Snow Theme » — CleytonKauffman\n« Apple Cider » — Zane Little Music\n\nDialogues : Dialogue Manager — Nathan Hoad (MIT)\nÉtalonnage : Godot Color Grading — Rytelier (MIT)"
+const CREDITS := "Personnages voxel : Kenney — Blocky Characters (CC0)\nModèles 3D et ciel : Kenney — Survival, Pirate, Fantasy Town, Holiday, Nature, Furniture Kits, City Kit Suburban, Cube Pets, Skyboxes (CC0)\nBruitages : Kenney — Impact, Interface, RPG, Casino, Jingles (CC0)\n\nMusiques (OpenGameArt, CC0) :\n« Hush Hamlet » — Zane Little Music\n« Bossa Town » — KarateStudios\n« Snow Theme » — CleytonKauffman\n« Apple Cider » — Zane Little Music\n\nPolices : Fredoka, Nunito (SIL Open Font License)
+Dialogues : Dialogue Manager — Nathan Hoad (MIT)\nÉtalonnage : Godot Color Grading — Rytelier (MIT)"
 
 var main: Node
 
@@ -57,21 +58,18 @@ func _ready() -> void:
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_logo.add_child(logo)
-	var sub := UIStyle.title("Un archipel à faire revivre", 24)
-	sub.add_theme_color_override("font_color", UIStyle.TEXT)
-	sub.add_theme_color_override("font_outline_color", Color("fff8ec"))
-	sub.add_theme_constant_override("outline_size", 10)
-	_logo.add_child(sub)
 
 	# Boutons
 	var center := CenterContainer.new()
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(center)
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", UIStyle.box(UIStyle.PANEL, 26, UIStyle.BORDER, 4, 24))
+	var pst := UIStyle.frame(30, 22)
+	pst.bg_color = Color(UIStyle.CREAM, 0.92)
+	panel.add_theme_stylebox_override("panel", pst)
 	center.add_child(panel)
 	_menu = VBoxContainer.new()
-	_menu.custom_minimum_size = Vector2(340, 0)
+	_menu.custom_minimum_size = Vector2(360, 0)
 	_menu.add_theme_constant_override("separation", 10)
 	panel.add_child(_menu)
 	_continue = UIStyle.colored_button("Continuer", UIStyle.GREEN, 22)

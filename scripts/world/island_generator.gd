@@ -26,7 +26,7 @@ static var beach := {}
 static var pond := Vector3.ZERO
 ## Campement abandonné (Île Prairie) : centre au sol, position du coffre.
 static var camp := {}
-## Objets 3D générés (arbres, épave, ruines...) : {"kind", "pos", "rot", "scale", "key"}.
+## Objets 3D générés (arbres, ruines, débris du naufrage...) : {"kind", "pos", "rot", "scale", "key"}.
 static var props: Array[Dictionary] = []
 
 
@@ -153,12 +153,13 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 			for dx in range(-1, 2):
 				world.set_raw(SPAWN.x + 4 + dx, sh, SPAWN.y - 2 + dz, Blocks.DIRT)
 
-	# Plage du naufrage : épave et ruines englouties.
+	# Plage du naufrage : débris et ruines englouties.
 	beach = {}
 	camp = {}
 	pond = Vector3.ZERO
 	if island["id"] == "prairie":
 		beach = _find_beach(heights)
+		_flatten_beach(world, heights)
 		_place_wreck(world, heights, beach, seed_v + 99)
 		heights = _place_pond(world, heights)
 		_place_camp(world, heights)
@@ -178,7 +179,7 @@ static func generate(world: VoxelWorld, island: Dictionary) -> Vector3:
 			_prop("barrier_rock", Vector3(x + 0.5, h + 1, z + 0.5), a * 3.7, 1.0 + fmod(i * 0.37, 0.4), "g:z:%d" % i)
 
 	# Ruines de maisons.
-	var ruins := _place_ruins(world, heights, biome, rng, 56)
+	var ruins := _place_ruins(world, heights, biome, rng, 18)
 
 	# Rochers.
 	for i in 240:
@@ -296,7 +297,7 @@ static func _place_ruins(world: VoxelWorld, heights: PackedInt32Array, biome: St
 			continue
 		var overlap := false
 		for r in rects:
-			if r.grow(4).intersects(rect):
+			if r.grow(14).intersects(rect):
 				overlap = true
 				break
 		if overlap:
@@ -471,7 +472,7 @@ static func _place_wreck(world: VoxelWorld, heights: PackedInt32Array, b: Dictio
 		_prop(flotsam[i], Vector3(c.x + 0.5, g + 1, c.y + 0.5), rng.randf() * TAU, rng.randf_range(0.9, 1.1), "g:f:%d" % i)
 
 	# La vieille barque, à réparer pour explorer l'archipel (Expeditions), et
-	# une caisse bien plus ancienne que l'épave (le mystère).
+	# une caisse bien plus ancienne que le naufrage (le mystère).
 	var boat := _shore_spot(at, ground, [-9, -10, -8, -11, -7, -12, -6, -13, 9, 10, 8, 11, 12, 7])
 	if boat != Vector2i(-1, -1):
 		_prop("rowboat", Vector3(boat.x + 0.5, ground.call(boat) + 1, boat.y + 0.5), atan2(float(out.x), float(out.y)), 1.25, "g:boat")
@@ -479,10 +480,8 @@ static func _place_wreck(world: VoxelWorld, heights: PackedInt32Array, b: Dictio
 	if crate != Vector2i(-1, -1) and crate.distance_to(boat) > 3.0:
 		_prop("crate", Vector3(crate.x + 0.5, ground.call(crate) + 1, crate.y + 0.5), 0.6, 1.1, "g:oldcrate")
 
-	# L'épave du bateau, échouée dans les vagues.
-	var hc: Vector2i = at.call(10, 4)
-	var side_v := Vector2(side)
-	_prop("wreck", Vector3(hc.x + 0.5, SEA - 0.4, hc.y + 0.5), atan2(side_v.x, side_v.y) + 0.35, 1.15, "g:wreck")
+	# (L'épave du bateau est retirée pour l'instant : elle n'avait ni
+	# collision ni intérieur.)
 
 	# Ruines englouties : colonnes, une tête de statue et un obélisque.
 	for sgn in [-1, 1]:
@@ -496,6 +495,29 @@ static func _place_wreck(world: VoxelWorld, heights: PackedInt32Array, b: Dictio
 	_prop("statue_head", Vector3(tw.x + 0.5, ground.call(tw) + 1, tw.y + 0.5), atan2(-float(out.x), -float(out.y)) + 0.4, 1.3, "g:head")
 	var ob: Vector2i = at.call(14, 9)
 	_prop("obelisk", Vector3(ob.x + 0.5, ground.call(ob) + 1, ob.y + 0.5), 0.3, 1.2, "g:obelisk")
+
+
+## Aplanit le sable autour de l'endroit où le naufragé se réveille (intro).
+static func _flatten_beach(world: VoxelWorld, heights: PackedInt32Array) -> void:
+	var c: Vector2i = beach["cell"]
+	var target := SEA + 1
+	for dz in range(-3, 4):
+		for dx in range(-3, 4):
+			if dx * dx + dz * dz > 10:
+				continue
+			var x := c.x + dx
+			var z := c.y + dz
+			var i := x + z * VoxelWorld.SX
+			var h := heights[i]
+			if h < SEA:
+				continue  # (on laisse l'eau)
+			for y in range(target + 1, h + 1):
+				world.set_raw(x, y, z, Blocks.AIR)
+			for y in range(h + 1, target + 1):
+				world.set_raw(x, y, z, Blocks.SAND)
+			world.set_raw(x, target, z, Blocks.SAND)
+			heights[i] = target
+	beach["pos"] = Vector3(c.x + 0.5, target + 1, c.y + 0.5)
 
 
 ## Une case de plage (hors de l'eau, à peine au-dessus de la mer) le long du
@@ -605,7 +627,7 @@ static func _place_pollution(world: VoxelWorld, heights: PackedInt32Array, islan
 		if n > 0:
 			waste += n
 			placed += 1
-	# Autour du campement et de l'épave (Île Prairie) : de quoi commencer.
+	# Autour du campement et de la plage (Île Prairie) : de quoi commencer.
 	if island["id"] == "prairie":
 		var spots: Array[Vector2] = []
 		for i in 6:
@@ -615,7 +637,8 @@ static func _place_pollution(world: VoxelWorld, heights: PackedInt32Array, islan
 			var b: Vector3 = beach["pos"]
 			for i in 6:
 				var a := rng.randf() * TAU
-				spots.append(Vector2(b.x, b.z) + Vector2(cos(a), sin(a)) * rng.randf_range(3.0, 9.0))
+				# (pas là où le naufragé se réveille)
+				spots.append(Vector2(b.x, b.z) + Vector2(cos(a), sin(a)) * rng.randf_range(7.0, 13.0))
 		for sp in spots:
 			waste += pile.call(floori(sp.x), floori(sp.y))
 	# Vase : sur la mare et dans les lagons à l'intérieur de l'île.

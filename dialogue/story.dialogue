@@ -4,13 +4,13 @@
 ~ reveil
 Bon... Je n'ai plus rien.
 Pas d'outil, pas d'argent... même pas de quoi manger.
-Juste quelques débris du bateau.
 Il faut que j'explore l'île. Je trouverai peut-être de quoi m'en sortir.
 => END
 
 ~ eau
-Un petit point d'eau !
-Au moins, je ne mourrai pas de soif.
+De l'eau douce !
+L'eau de mer, ça ne se boit pas... celle-ci, si.
+Au moins, je ne mourrai pas de soif sur cette île.
 => END
 
 ~ provisions
@@ -30,8 +30,9 @@ Un vieux coffre... Il n'est même pas fermé à clé.
 
 ~ outil
 Des outils rouillés... sauf celui-ci.
+Il est gravé d'un mot à moitié effacé : « Façonneur ».
 Il a l'air ancien, mais il fonctionne encore !
-On dirait qu'il peut détruire et construire à peu près n'importe quoi.
+On dirait qu'il peut façonner l'île à peu près comme je veux.
 => END
 
 ~ rouille
@@ -137,11 +138,11 @@ La lumière brille de nouveau au sommet de la tour.
 Là-bas, loin vers l'ouest... une lueur rouge répond. Une île au volcan !
 => END
 
-# --- Le mystère de l'épave (Mystery) : par petites touches, jamais expliqué
+# --- Le mystère des vieilles caisses (Mystery) : par petites touches, jamais expliqué
 
 ~ caisse
 Une vieille caisse, à moitié enfouie dans le sable.
-Le bois est bien plus usé que celui de l'épave...
+Le bois est bien plus vieux que les débris de mon bateau...
 => END
 
 ~ caisse_vide
@@ -150,7 +151,7 @@ Il n'y a plus rien dedans.
 
 ~ carte
 Une carte de l'archipel... dessinée à la main.
-Elle est très ancienne. Bien plus que l'épave.
+Elle est très ancienne. Bien plus que mon naufrage.
 Quelqu'un a entouré une tour, près de la plage.
 => END
 

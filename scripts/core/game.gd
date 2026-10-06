@@ -6,6 +6,9 @@ signal resident_arrived(id: String)
 signal stats_changed
 signal action_done(kind: String)
 signal inventory_changed
+## Un objet ou un bloc obtenu pour la toute première fois ("item:<id>" ou
+## "block:<id>") : le HUD affiche sa fiche de découverte.
+signal first_obtained(key: String)
 
 const SAVE_PATH := "user://evergrove_save.json"
 const SAVE_VERSION := 7  # v7 : îles agrandies (384 x 384)
@@ -115,9 +118,9 @@ func _setup_inputs() -> void:
 	_add_logical("carnet", [KEY_C])
 	_add_logical("map", [KEY_M])
 	_add_logical("inventory", [KEY_I, KEY_TAB])
-	_add_logical("block_next", [KEY_R])
-	_add_logical("block_prev", [KEY_F])
-	_add_logical("rotate", [KEY_T])
+	# Poser : la molette choisit l'objet, F change de catégorie, R tourne.
+	_add_logical("place_category", [KEY_F])
+	_add_logical("rotate", [KEY_R])
 	_add_logical("assign", [KEY_G])
 	_add_logical("ui_back", [KEY_ESCAPE])
 	_add_logical("fly", [KEY_V])
@@ -149,6 +152,8 @@ func _add_logical(action: String, keys: Array) -> void:
 func add_item(kind: String, amount := 1) -> void:
 	inventory[kind] = item_count(kind) + amount
 	inventory_changed.emit()
+	if amount > 0 and not admin and collect("items", kind):
+		first_obtained.emit("item:" + kind)
 
 
 func item_count(kind: String) -> int:
@@ -162,6 +167,8 @@ func block_count(id: int) -> int:
 func add_block(id: int, amount := 1) -> void:
 	blocks[str(id)] = maxi(0, block_count(id) + amount)
 	inventory_changed.emit()
+	if amount > 0 and not admin and collect("blocks", str(id)):
+		first_obtained.emit("block:%d" % id)
 
 
 func structure_count(kind: String) -> int:

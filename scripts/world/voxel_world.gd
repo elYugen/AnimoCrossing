@@ -262,20 +262,22 @@ func _emit_face(mb: MeshBuilder, faces: PackedVector3Array, x: int, y: int, z: i
 			else:
 				low.append(pk)
 				high.append(Vector3(pk.x, mid, pk.z))
-		_quad(mb, low, ao, order, nf, col * jitter)
-		_quad(mb, high, ao, order, nf, green * jitter)
+		_quad(mb, low, ao, order, nf, col * jitter, id, d)
+		_quad(mb, high, ao, order, nf, green * jitter, id, d)
 	else:
-		_quad(mb, pos, ao, order, nf, col * jitter)
+		_quad(mb, pos, ao, order, nf, col * jitter, id, d)
 	faces.append_array([pos[0], pos[1], pos[2], pos[0], pos[2], pos[3]])
 
 
-func _quad(mb: MeshBuilder, pos: Array[Vector3], ao: Array[float], order: Array[int], n: Vector3, col: Color) -> void:
+## `id` et `d` (type de bloc, face) vont dans les UV : le shader en tire un
+## motif (grain, planches, briques...).
+func _quad(mb: MeshBuilder, pos: Array[Vector3], ao: Array[float], order: Array[int], n: Vector3, col: Color, id := 0, face := 0) -> void:
 	var a := order[0]
 	var b := order[1]
 	var c := order[2]
 	var d := order[3]
 	mb.add_quad(pos[a], pos[b], pos[c], pos[d], n,
-		_shade(col, ao[a]), _shade(col, ao[b]), _shade(col, ao[c]), _shade(col, ao[d]))
+		_shade(col, ao[a]), _shade(col, ao[b]), _shade(col, ao[c]), _shade(col, ao[d]), Vector2(id, face))
 
 
 static func _shade(c: Color, f: float) -> Color:

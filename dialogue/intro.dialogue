@@ -1,14 +1,29 @@
-# Pensées du personnage sur l'écran noir, juste après le naufrage.
+# Introduction d'une nouvelle partie (ShipwreckIntro).
 # Tag [#hurt] : flash rouge et secousse de la bulle.
 
+# Acte 1 — la tempête, sur l'écran noir.
+~ tempete
+Tiens bon... Tiens bon !
+Le mât... il ne va pas tenir !
+Cette vague... elle est énorme...
+=> END
+
+# Après le choc : le silence, puis les vagues.
 ~ naufrage
 ...
-Où est-ce que je suis ?
-Je me souviens du bateau...
-Il y avait une tempête.
-Puis... plus rien.
-...
+Où est-ce que je suis... ?
 Aïe... ma tête. [#hurt]
-...
-Il faut que je sorte de là.
+Je me souviens de la tempête... puis plus rien.
+=> END
+
+# Acte 2 — les yeux ouverts, allongé sur le sable.
+~ reveil_plage
+Du sable... le bruit des vagues...
+Allez... il faut que je me lève.
+=> END
+
+# Acte 3 — debout, au milieu des débris.
+~ debout
+Il ne reste que quelques caisses de mon bateau...
+Et cette île. Personne à l'horizon.
 => END
